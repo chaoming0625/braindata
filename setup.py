@@ -35,7 +35,7 @@ setup(
   author_email='chao.brain@qq.com',
   packages=packages,
   python_requires='>=3.7',
-  install_requires=['brainpy>=2.2.0'],
+  install_requires=['brainpy>=2.2.0', 'requests'],
   url='https://github.com/brainpy/brainpy-datasets',
   project_urls={
     "Bug Tracker": "https://github.com/brainpy/brainpy-datasets/issues",
@@ -65,5 +65,5 @@ setup(
     'Topic :: Scientific/Engineering :: Artificial Intelligence',
     'Topic :: Software Development :: Libraries',
   ],
-  license='GPL-3.0 License',
+  license='GPL-3.0 license',
 )
