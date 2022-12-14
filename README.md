@@ -21,7 +21,7 @@ or auditory datasets.
 ``brainpy-datasets`` is based on Python (>=3.7) and can be installed on  Linux (Ubuntu 16.04 or later), macOS (10.12 or later), and Windows platforms. Install the latest version of ``brainpylib``:
 
 ```bash
-$ pip install brainpy_datasets -U
+$ pip install brainpy-datasets -U
 ```
 
 ## Citing
