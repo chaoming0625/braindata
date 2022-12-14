@@ -39,13 +39,13 @@ setup(
   url='https://github.com/brainpy/brainpy-datasets',
   project_urls={
     "Bug Tracker": "https://github.com/brainpy/brainpy-datasets/issues",
-    "Documentation": "https://brainpy.readthedocs.io/",
+    # "Documentation": "https://brainpy.readthedocs.io/",
     "Source Code": "https://github.com/brainpy/brainpy-datasets",
   },
   keywords=('computational neuroscience, '
             'brain-inspired computation, '
-            'dynamical systems, '
-            'differential equations, '
+            'brainpy, '
+            'dataset, '
             'brain modeling, '
             'brain dynamics modeling, '
             'brain dynamics programming'),
