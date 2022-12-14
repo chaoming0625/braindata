@@ -116,7 +116,7 @@ def get_file(
   Example:
 
   ```python
-  path_to_downloaded_file = tf.keras.utils.get_file(
+  path_to_downloaded_file = get_file(
       "flower_photos",
       "https://storage.googleapis.com/download.tensorflow.org/example_images/flower_photos.tgz",
       untar=True)
@@ -404,7 +404,7 @@ class Sequence:
   # Here, `x_set` is list of path to the images
   # and `y_set` are the associated classes.
 
-  class CIFAR10Sequence(tf.keras.utils.Sequence):
+  class CIFAR10Sequence(Sequence):
 
       def __init__(self, x_set, y_set, batch_size):
           self.x, self.y = x_set, y_set
@@ -668,7 +668,7 @@ class OrderedEnqueuer(SequenceEnqueuer):
   """Builds a Enqueuer from a Sequence.
 
   Args:
-      sequence: A `tf.keras.utils.data_utils.Sequence` object.
+      sequence: A `Sequence` object.
       use_multiprocessing: use multiprocessing if True, otherwise threading
       shuffle: whether to shuffle the data at the beginning of each epoch
   """
@@ -764,9 +764,7 @@ def init_pool_generator(gens, random_seed=None, id_queue=None):
   Args:
     gens: State which should be made available to worker processes.
     random_seed: An optional value with which to seed child processes.
-    id_queue: A multiprocessing Queue of worker ids. This is used to indicate
-      that a worker process was created by Keras and can be terminated using
-      the cleanup_all_keras_forkpools utility.
+    id_queue: A multiprocessing Queue of worker ids.
   """
   global _SHARED_SEQUENCES
   _SHARED_SEQUENCES = gens
@@ -921,22 +919,22 @@ def pad_sequences(
   default.
 
   >>> sequence = [[1], [2, 3], [4, 5, 6]]
-  >>> tf.keras.preprocessing.sequence.pad_sequences(sequence)
+  >>> pad_sequences(sequence)
   array([[0, 0, 1],
          [0, 2, 3],
          [4, 5, 6]], dtype=int32)
 
-  >>> tf.keras.preprocessing.sequence.pad_sequences(sequence, value=-1)
+  >>> pad_sequences(sequence, value=-1)
   array([[-1, -1,  1],
          [-1,  2,  3],
          [ 4,  5,  6]], dtype=int32)
 
-  >>> tf.keras.preprocessing.sequence.pad_sequences(sequence, padding='post')
+  >>> pad_sequences(sequence, padding='post')
   array([[1, 0, 0],
          [2, 3, 0],
          [4, 5, 6]], dtype=int32)
 
-  >>> tf.keras.preprocessing.sequence.pad_sequences(sequence, maxlen=2)
+  >>> pad_sequences(sequence, maxlen=2)
   array([[0, 1],
          [2, 3],
          [5, 6]], dtype=int32)

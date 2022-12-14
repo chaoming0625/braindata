@@ -12,8 +12,8 @@ INTERACTIVE_LOGGING.enable = True
 def enable_interactive_logging():
   """Turn on interactive logging.
 
-  When interactive logging is enabled, Keras displays logs via stdout.
-  This provides the best experience when using Keras in an interactive
+  When interactive logging is enabled, brainpy displays logs via stdout.
+  This provides the best experience when using brainpy in an interactive
   environment such as a shell or a notebook.
   """
   INTERACTIVE_LOGGING.enable = True
@@ -22,8 +22,8 @@ def enable_interactive_logging():
 def disable_interactive_logging():
   """Turn off interactive logging.
 
-  When interactive logging is disabled, Keras sends logs to `absl.logging`.
-  This is the best option when using Keras in a non-interactive
+  When interactive logging is disabled, brainpy sends logs to `absl.logging`.
+  This is the best option when using brainpy in a non-interactive
   way, such as running a training or inference job on a server.
   """
   INTERACTIVE_LOGGING.enable = False
@@ -33,8 +33,8 @@ def is_interactive_logging_enabled():
   """Check if interactive logging is enabled.
 
   To switch between writing logs to stdout and `absl.logging`, you may use
-  `keras.utils.enable_interactive_logging()` and
-  `keras.utils.disable_interactie_logging()`.
+  `enable_interactive_logging()` and
+  `disable_interactie_logging()`.
 
   Returns:
     Boolean (True if interactive logging is enabled and False otherwise).

@@ -29,7 +29,7 @@ import requests
 from brainpy import math as bm
 from tqdm import tqdm
 
-ENV_TORCH_HOME = 'BRAINPY_HOME'
+ENV_HOME = 'BRAINPY_HOME'
 ENV_XDG_CACHE_HOME = 'XDG_CACHE_HOME'
 DEFAULT_CACHE_DIR = '~/.cache'
 
@@ -37,9 +37,11 @@ USER_AGENT = "brainpy/datasets"
 
 
 def _get_home():
-  torch_home = os.path.expanduser(
-    os.getenv(ENV_TORCH_HOME, os.path.join(os.getenv(ENV_XDG_CACHE_HOME, DEFAULT_CACHE_DIR), 'brainpy')))
-  return torch_home
+  home = os.path.expanduser(os.getenv(ENV_HOME,
+                                      os.path.join(os.getenv(ENV_XDG_CACHE_HOME,
+                                                             DEFAULT_CACHE_DIR),
+                                                   'brainpy')))
+  return home
 
 
 # matches bfd8deac from resnet18-bfd8deac.pth
@@ -58,10 +60,10 @@ def _is_remote_location_available() -> bool:
 
 def get_dir():
   r"""
-  Get the Torch Hub cache directory used for storing downloaded models & weights.
+  Get the Hub cache directory used for storing downloaded models & weights.
 
-  If :func:`~torch.hub.set_dir` is not called, default path is ``$TORCH_HOME/hub`` where
-  environment variable ``$TORCH_HOME`` defaults to ``$XDG_CACHE_HOME/torch``.
+  If :func:`~torch.hub.set_dir` is not called, default path is ``$BRAINPY_HOME/hub`` where
+  environment variable ``$BRAINPY_HOME`` defaults to ``$XDG_CACHE_HOME/brainpy``.
   ``$XDG_CACHE_HOME`` follows the X Design Group specification of the Linux
   filesystem layout, with a default value ``~/.cache`` if the environment
   variable is not set.
@@ -71,7 +73,7 @@ def get_dir():
 
 
 def load_state_dict_from_url(url, model_dir=None, map_location=None, progress=True, check_hash=False, file_name=None):
-  r"""Loads the Torch serialized object at the given URL.
+  r"""Loads the serialized object at the given URL.
 
   If downloaded file is a zip file, it will be automatically
   decompressed.
@@ -94,13 +96,10 @@ def load_state_dict_from_url(url, model_dir=None, map_location=None, progress=Tr
           Default: False
       file_name (string, optional): name for the downloaded file. Filename from ``url`` will be used if not set.
 
-  Example:
-      >>> state_dict = load_state_dict_from_url('https://s3.amazonaws.com/pytorch/models/resnet18-5c106cde.pth')
-
   """
   # Issue warning to move data if old env is set
-  if os.getenv('TORCH_MODEL_ZOO'):
-    warnings.warn('TORCH_MODEL_ZOO is deprecated, please use env TORCH_HOME instead')
+  if os.getenv('BRAINPY_MODEL_ZOO'):
+    warnings.warn('BRAINPY_MODEL_ZOO is deprecated, please use env BRAINPY_HOME instead')
 
   if model_dir is None:
     hub_dir = get_dir()
@@ -172,12 +171,9 @@ def download_url_to_file(url, dst, hash_prefix=None, progress=True):
       progress (bool, optional): whether or not to display a progress bar to stderr
           Default: True
 
-  Example:
-      >>> download_url_to_file('https://s3.amazonaws.com/pytorch/models/resnet18-5c106cde.pth', '/tmp/temporary_file')
-
   """
   file_size = None
-  req = Request(url, headers={"User-Agent": "torch.hub"})
+  req = Request(url, headers={"User-Agent": "brainpy.hub"})
   u = urlopen(req)
   meta = u.info()
   if hasattr(meta, 'getheaders'):
@@ -224,7 +220,7 @@ def download_url_to_file(url, dst, hash_prefix=None, progress=True):
 def _get_extension_path(lib_name):
   lib_dir = os.path.dirname(__file__)
   if os.name == "nt":
-    # Register the main torchvision library location on the default DLL path
+    # Register the main library location on the default DLL path
     kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
     with_load_library_flags = hasattr(kernel32, "AddDllDirectory")
     prev_error_mode = kernel32.SetErrorMode(0x0001)
