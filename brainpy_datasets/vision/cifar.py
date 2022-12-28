@@ -1,3 +1,8 @@
+"""
+CIFAR dataset, which is rewritten according to torchvision APIs.
+"""
+
+
 import os.path
 import pickle
 from typing import Any, Callable, Optional

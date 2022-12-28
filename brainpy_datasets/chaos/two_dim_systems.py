@@ -177,35 +177,39 @@ class MackeyGlassEq(TwoDimChaosData):
                x_transform: Optional[Callable] = None,
                y_transform: Optional[Callable] = None,
                ):
-    super().__init__(t_transform, x_transform, y_transform)
+    with bm.environment(x64=True):
+      super().__init__(t_transform, x_transform, y_transform)
 
-    if inits is None:
-      inits = bm.ones(1) * 1.2
-    elif isinstance(inits, (float, int)):
-      inits = bm.asarray([inits], dtype=bm.dftype())
-    else:
-      assert isinstance(inits, (bm.ndarray, jnp.ndarray))
+      if inits is None:
+        inits = bm.ones(1) * 1.2
+      elif isinstance(inits, (float, int)):
+        inits = bm.asarray([inits], dtype=bm.float_)
+      else:
+        assert isinstance(inits, (bm.ndarray, jnp.ndarray))
 
-    rng = bm.random.RandomState(seed)
-    xdelay = bm.TimeDelay(inits, tau, dt=dt, interp_method='round')
-    xdelay.data.value = inits + 0.2 * (rng.random((xdelay.num_delay_step,) + inits.shape) - 0.5)
+      rng = bm.random.RandomState(seed)
+      xdelay = bm.TimeDelay(inits, tau, dt=dt, interp_method='round')
+      xdelay.data.value = inits + 0.2 * (rng.random((xdelay.num_delay_step,) + inits.shape) - 0.5)
 
-    @odeint(method=method, state_delays={'x': xdelay})
-    def mg_eq(x, t):
-      xtau = xdelay(t - tau)
-      return beta * xtau / (1 + xtau ** n) - gamma * x
+      @odeint(method=method, state_delays={'x': xdelay})
+      def mg_eq(x, t):
+        xtau = xdelay(t - tau)
+        return beta * xtau / (1 + xtau ** n) - gamma * x
 
-    runner = IntegratorRunner(mg_eq,
-                              inits={'x': inits},
-                              monitors=['x'],
-                              fun_monitors={'x(tau)': lambda t, _: xdelay(t - tau)},
-                              progress_bar=progress_bar, dt=dt,
-                              numpy_mon_after_run=numpy_mon)
-    runner.run(duration)
+      runner = IntegratorRunner(
+        mg_eq,
+        inits={'x': inits},
+        monitors={'x(tau)': lambda tdi: xdelay(tdi['t'] - tau), 'x': 'x'},
+        progress_bar=progress_bar,
+        dt=dt,
+        numpy_mon_after_run=numpy_mon
+      )
+      runner.run(duration)
 
-    self.ts = runner.mon['ts']
-    self.xs = runner.mon['x']
-    self.ys = runner.mon['x(tau)']
+      self.ts = runner.mon['ts']
+      self.xs = runner.mon['x']
+      self.ys = runner.mon['x(tau)']
+
 
 
 class PWLDuffuingEq(TwoDimChaosData):
@@ -215,31 +219,32 @@ class PWLDuffuingEq(TwoDimChaosData):
   ----------
   .. [12] https://brainpy-examples.readthedocs.io/en/latest/classical_dynamical_systems/Multiscroll_attractor.html#PWL-Duffing-chaotic-attractor
   """
-  def __init__(self,
-               duration, dt=0.001, e=0.25, m0=-0.0845, m1=0.66, omega=1, i=-14,
-               method='rk4', inits=None, numpy_mon=False,
-               t_transform: Optional[Callable] = None,
-               x_transform: Optional[Callable] = None,
-               y_transform: Optional[Callable] = None,
-               ):
+
+  def __init__(
+      self,
+      duration, dt=0.001, e=0.25, m0=-0.0845, m1=0.66, omega=1, i=-14,
+      method='rk4', inits=None, numpy_mon=False,
+      t_transform: Optional[Callable] = None,
+      x_transform: Optional[Callable] = None,
+      y_transform: Optional[Callable] = None,
+  ):
     super().__init__(t_transform, x_transform, y_transform)
 
     gamma = 0.14 + i / 20
 
-    @odeint(method=method)
     def PWL_duffing_eq(x, y, t):
       dx = y
       dy = -m1 * x - (0.5 * (m0 - m1)) * (abs(x + 1) - abs(x - 1)) - e * y + gamma * bm.cos(omega * t)
       return dx, dy
 
-    r =  _two_variable_model(PWL_duffing_eq,
-                               default_inits=dict(x=0, y=0.),
-                               duration=duration, dt=dt, inits=inits,
-                               numpy_mon=numpy_mon)
+    self.integrator = odeint(PWL_duffing_eq, method=method)
+    r = _two_variable_model(self.integrator,
+                            default_inits=dict(x=0, y=0.),
+                            duration=duration, dt=dt, inits=inits,
+                            numpy_mon=numpy_mon)
     self.ts = r['ts']
     self.xs = r['xs']
     self.ys = r['ys']
-
 
 
 def _two_variable_model(integrator, duration, default_inits, inits=None,
@@ -262,6 +267,7 @@ def _two_variable_model(integrator, duration, default_inits, inits=None,
   return {'ts': runner.mon.ts,
           'x': runner.mon.x,
           'y': runner.mon.y}
+
 
 class _HenonMap(bp.DynamicalSystem):
   """Hénon map."""

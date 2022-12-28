@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 
+"""
+This util file is rewritten from pytorch code.
+"""
+
 import bz2
 import ctypes
 import errno

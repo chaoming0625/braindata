@@ -1,5 +1,7 @@
-"""Utilities related to disk I/O."""
+"""Utilities related to disk I/O.
 
+This file is rewritten from the keras (https://github.com/keras-team/keras).
+"""
 import os
 import sys
 import threading

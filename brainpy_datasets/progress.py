@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+"""
+This file is rewritten from the keras (https://github.com/keras-team/keras).
+"""
 import os
 import sys
 import time

@@ -1,4 +1,7 @@
-"""Boston housing price regression dataset."""
+"""Boston housing price regression dataset.
+
+This dataset is inspired by the keras API (https://github.com/keras-team/keras).
+"""
 
 import os.path
 
@@ -33,14 +36,10 @@ class BostonHousing(Dataset):
     [StatLib website](http://lib.stat.cmu.edu/datasets/boston).
 
     Args:
-      path: path where to cache the dataset locally
-          (relative to `~/.keras/datasets`).
+      root: path where to cache the dataset locally.
       test_split: fraction of the data to reserve as test set.
       seed: Random seed for shuffling the data
           before computing the test split.
-
-    Returns:
-      Tuple of Numpy arrays: `(x_train, y_train), (x_test, y_test)`.
 
     **x_train, x_test**: numpy arrays with shape `(num_samples, 13)`
       containing either the training samples (for x_train),

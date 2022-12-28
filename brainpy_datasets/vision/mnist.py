@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+MNIST dataset, which is rewritten according to torchvision APIs.
+"""
+
 
 import codecs
 import os
@@ -528,7 +532,7 @@ def read_label_file(path: str) -> jnp.ndarray:
   x = read_sn3_pascalvincent_tensor(path, strict=False)
   assert x.dtype == np.uint8
   assert x.ndim == 1
-  return x.astype(bm.dftype())
+  return x.astype(bm.float_)
 
 
 def read_image_file(path: str) -> jnp.ndarray:

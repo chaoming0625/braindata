@@ -1,4 +1,5 @@
-"""Utilities for file download and caching."""
+"""This utility file is rewritten from the keras APIs (https://github.com/keras-team/keras).
+"""
 
 import functools
 import hashlib
