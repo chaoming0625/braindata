@@ -1,7 +1,7 @@
 import multiprocessing
 import queue
 from itertools import cycle
-from typing import TypeVar
+from typing import TypeVar, Callable
 
 import jax
 import jax.numpy as jnp
@@ -51,6 +51,7 @@ class DataLoader(object):
       drop_last: bool = False,
       pin_memory: bool = False,
       prefetch_factor: int = 2,
+      collate_fn: Callable = None,
   ):
     self.shuffle = shuffle
     self.drop_last = drop_last
@@ -59,6 +60,7 @@ class DataLoader(object):
     self.batch_size = batch_size
     self.num_workers = num_workers
     self.prefetch_factor = prefetch_factor
+    self._collate_fn = default_collate_fn if collate_fn is None else collate_fn
 
     self._index = 0
     self._index_prefetch = 0
@@ -84,10 +86,10 @@ class DataLoader(object):
 
   def __next__(self):
     batch = self.get_batch()
-    if get_batch is None:
+    if batch is None:
       raise StopIteration
     else:
-      return get_batch
+      return batch
 
   def get_batch(self):
     if self._index >= len(self.dataset):
@@ -96,7 +98,7 @@ class DataLoader(object):
     if self.drop_last and batch_size < self.batch_size:
       return None
     batch_size = min(batch_size, self.batch_size)
-    return self._collate_fn([self._get() for _ in range(batch_size)])
+    return self._collate_fn(self, [self._get() for _ in range(batch_size)])
 
   def __iter__(self):
     self._index = 0
@@ -151,31 +153,34 @@ class DataLoader(object):
       self._index_queues[next(self._worker_cycle)].put(self._index_prefetch)
       self._index_prefetch += 1
 
-  def _collate_fn(self, batch):
-    if isinstance(batch[0], (np.ndarray, jax.Array, bm.Array)):
-      data = np.stack(batch)
-      if self.pin_memory:
-        data = jnp.asarray(data)
-      return data
-    elif isinstance(batch[0], (int, float)):
-      data = np.array(batch)
-      if self.pin_memory:
-        data = jnp.asarray(data)
-      return data
-    elif isinstance(batch[0], (list, tuple)):
-      return tuple(self._collate_fn(var) for var in zip(*batch))
-
   @staticmethod
   def _worker_fn(dataset, index_queue, output_queue):
-      while True:
-        # Worker function, simply reads indices from index_queue, and adds the
-        # dataset element to the output_queue
-        try:
-          index = index_queue.get(timeout=0)
-        except queue.Empty:
-          continue
-        if index is None:
-          break
-        data = dataset[index]
-        output_queue.put((index, data))
+    while True:
+      # Worker function, simply reads indices from index_queue, and adds the
+      # dataset element to the output_queue
+      try:
+        index = index_queue.get(timeout=0)
+      except queue.Empty:
+        continue
+      if index is None:
+        break
+      data = dataset[index]
+      output_queue.put((index, data))
 
+
+def default_collate_fn(cls, batch):
+  if isinstance(batch[0], np.ndarray):
+    data = np.stack(batch)
+    if cls.pin_memory:
+      data = jnp.asarray(data)
+    return data
+  elif isinstance(batch[0], (jax.Array, bm.Array)):
+    data = bm.stack(batch)
+    return data
+  elif isinstance(batch[0], (int, float)):
+    data = np.array(batch)
+    if cls.pin_memory:
+      data = jnp.asarray(data)
+    return data
+  elif isinstance(batch[0], (list, tuple)):
+    return tuple(default_collate_fn(cls, var) for var in zip(*batch))

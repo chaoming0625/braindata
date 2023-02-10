@@ -2,7 +2,7 @@ from typing import Union, Callable, Optional
 
 import numpy as np
 import brainpy as bp
-from brainpy_datasets._src.cognitive.base import VariedLenCogTask
+from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration, is_time_duration)
 from brainpy_datasets._src.cognitive.utils import interval_of
 from brainpy_datasets._src.utils.random import TruncExp
 from brainpy_datasets._src.utils.others import initialize
@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 
-class HierarchicalReasoning(VariedLenCogTask):
+class HierarchicalReasoning(CognitiveTask):
   """Hierarchical reasoning of rules.
 
   On each trial, the subject receives two flashes separated by a delay
@@ -34,15 +34,14 @@ class HierarchicalReasoning(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float, Callable] = TruncExp(600, 400, 800),
-      t_rule_target: Union[int, float, Callable] = 1000.,
-      t_fixation2: Union[int, float, Callable] = TruncExp(600, 400, 900),
-      t_flash1: Union[int, float, Callable] = 100,
-      t_delay: Union[int, float, Callable] = None,
-      t_flash2: Union[int, float, Callable] = 100.,
-      t_decision: Union[int, float, Callable] = 700.,
+      t_fixation: TimeDuration = TruncExp(600, 400, 800),
+      t_rule_target: TimeDuration = 1000.,
+      t_fixation2: TimeDuration = TruncExp(600, 400, 900),
+      t_flash1: TimeDuration = 100,
+      t_delay: TimeDuration = None,
+      t_flash2: TimeDuration = 100.,
+      t_decision: TimeDuration = 700.,
       noise_sigma: float = 1.0,
       num_trial: int = 1024,
       seed: Optional[int] = None,
@@ -53,7 +52,6 @@ class HierarchicalReasoning(VariedLenCogTask):
                      target_transform=target_transform,
                      dt=dt,
                      num_trial=num_trial,
-                     max_seq_len=max_seq_len,
                      seed=seed)
     if t_delay is None:
       t_delay = lambda: self.rng.choice([530, 610, 690, 770, 850, 930, 1010, 1090, 1170])
@@ -83,7 +81,7 @@ class HierarchicalReasoning(VariedLenCogTask):
     self.input_features = ['fixation', 'rule 0', 'rule 1', 'stimulus 0', 'stimulus 1']
     self._feature_info = {'fixation': 1, 'rule': 2, 'choice': 2}
 
-  def sample_trial(self, index):
+  def sample_a_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_rule_target = int(initialize(self.t_rule_target) / self.dt)
     t_fixation2 = int(initialize(self.t_fixation2) / self.dt)
@@ -143,7 +141,7 @@ class HierarchicalReasoning(VariedLenCogTask):
     return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
-class ProbabilisticReasoning(VariedLenCogTask):
+class ProbabilisticReasoning(CognitiveTask):
   """Probabilistic reasoning.
 
   The agent is shown a sequence of stimuli. Each stimulus is associated
@@ -169,12 +167,11 @@ class ProbabilisticReasoning(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float, Callable] = 500,
-      t_stimulus: Union[int, float, Callable] = 500,
-      t_delay: Union[int, float, Callable] = None,
-      t_decision: Union[int, float, Callable] = 700.,
+      t_fixation: TimeDuration = 500,
+      t_stimulus: TimeDuration = 500,
+      t_delay: TimeDuration = None,
+      t_decision: TimeDuration = 700.,
       num_trial: int = 1024,
       num_loc: int = 4,
       seed: Optional[int] = None,
@@ -184,7 +181,6 @@ class ProbabilisticReasoning(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
-                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
     if t_delay is None:
@@ -215,7 +211,7 @@ class ProbabilisticReasoning(VariedLenCogTask):
     for i in range(num_loc):
       self._feature_info[f'loc{i}'] = dim_shape
 
-  def sample_trial(self, index):
+  def sample_a_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_stimulus = int(initialize(self.t_stimulus) / self.dt)
     t_delay = int(initialize(self.t_delay) / self.dt)

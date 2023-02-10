@@ -38,7 +38,7 @@ class TestPerceptualDecisionMakingTask(parameterized.TestCase):
                                                t_bin=t_bin,
                                                n_bin=n_bin,
                                                )
-    X, Y = task.sample_trial(0)
+    X, Y = task.sample_a_trial(0)
 
     n = int(((t_cue + t_bin) * n_bin + t_fixation + t_decision) / 10)
     self.assertTrue(X[0].shape[0] == n)

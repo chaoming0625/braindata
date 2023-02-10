@@ -3,7 +3,9 @@ from typing import Union, Callable, Optional, Tuple
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets._src.cognitive.base import VariedLenCogTask, FixedLenCogTask
+from brainpy_datasets._src.cognitive.base import (CognitiveTask,
+                                                  TimeDuration,
+                                                  is_time_duration)
 from brainpy_datasets._src.cognitive.utils import interval_of
 from brainpy_datasets._src.utils.random import TruncExp
 from brainpy_datasets._src.utils.others import initialize
@@ -17,7 +19,7 @@ __all__ = [
 ]
 
 
-class SingleContextDecisionMaking(VariedLenCogTask):
+class SingleContextDecisionMaking(CognitiveTask):
   """Context-dependent decision-making task.
 
   The agent simultaneously receives stimulus inputs from two modalities (
@@ -39,12 +41,11 @@ class SingleContextDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float] = 300.,
-      t_stimulus: Union[int, float] = 750.,
-      t_delay: Union[int, float, Callable] = TruncExp(600, 300, 3000),
-      t_decision: Union[int, float] = 100.,
+      t_fixation: TimeDuration = 300.,
+      t_stimulus: TimeDuration = 750.,
+      t_delay: TimeDuration = TruncExp(600, 300, 3000),
+      t_decision: TimeDuration = 100.,
       context: int = 0,
       num_choice: int = 2,
       noise_sigma: float = 1.0,
@@ -56,19 +57,14 @@ class SingleContextDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
-                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
     # time related
-    self.t_fixation = bp.check.is_float(t_fixation, allow_int=True)
-    self.t_stimulus = bp.check.is_float(t_stimulus, allow_int=True)
-    self.t_decision = bp.check.is_float(t_decision, allow_int=True)
-    self._n_fixation = int(self.t_fixation / self.dt)
-    self._n_stimulus = int(self.t_stimulus / self.dt)
-    self._n_decision = int(self.t_decision / self.dt)
-    assert isinstance(t_delay, (int, float, Callable))
-    self.t_delay = t_delay
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_stimulus = is_time_duration(t_stimulus)
+    self.t_decision = is_time_duration(t_decision)
+    self.t_delay = is_time_duration(t_delay)
 
     self.num_choice = bp.check.is_integer(num_choice, )
     self.noise_sigma = bp.check.is_float(noise_sigma, min_bound=0., allow_int=True)
@@ -92,17 +88,19 @@ class SingleContextDecisionMaking(VariedLenCogTask):
   def num_input_feature(self):
     return 1 + self.num_choice * 2
 
-  def sample_trial(self, item):
-    t_delay = initialize(self.t_delay)
-    _n_delay = int(t_delay / self.dt)
-    n_total = self._n_fixation + self._n_stimulus + _n_delay + self._n_decision
+  def sample_a_trial(self, item):
+    _n_delay = int(initialize(self.t_delay) / self.dt)
+    _n_fixation = int(initialize(self.t_fixation) / self.dt)
+    _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    _n_decision = int(initialize(self.t_decision) / self.dt)
+    n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
 
-    _time_info = {'fixation': self._n_fixation,
-                  'stimulus': self._n_stimulus,
+    _time_info = {'fixation': _n_fixation,
+                  'stimulus': _n_stimulus,
                   'delay': _n_delay,
-                  'decision': self._n_decision}
+                  'decision': _n_decision}
 
     choice_0 = ground_truth = self.rng.choice(self._choices)
     choice_1 = self.rng.choice(self._choices)
@@ -115,14 +113,14 @@ class SingleContextDecisionMaking(VariedLenCogTask):
 
     X[:, 0] = 1.
     stim = np.cos(self._features - stim_theta_0) * (coh_0 / 200) + 0.5
-    X[self._n_fixation: self._n_fixation + self._n_stimulus, 1:self.num_choice + 1] += stim
+    X[_n_fixation: _n_fixation + _n_stimulus, 1:self.num_choice + 1] += stim
     stim = np.cos(self._features - stim_theta_1) * (coh_1 / 200) + 0.5
-    X[self._n_fixation: self._n_fixation + self._n_stimulus, self.num_choice + 1:] += stim
-    rand = self.rng.randn(self._n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
-    X[self._n_fixation: self._n_fixation + self._n_stimulus, 1:] += rand
-    X[self._n_fixation + self._n_stimulus + _n_delay:] = 0.
+    X[_n_fixation: _n_fixation + _n_stimulus, self.num_choice + 1:] += stim
+    rand = self.rng.randn(_n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
+    X[_n_fixation: _n_fixation + _n_stimulus, 1:] += rand
+    X[_n_fixation + _n_stimulus + _n_delay:] = 0.
 
-    Y[self._n_fixation + self._n_stimulus + _n_delay:] = ground_truth + 1
+    Y[_n_fixation + _n_stimulus + _n_delay:] = ground_truth + 1
 
     if self.input_transform is not None:
       X = self.input_transform(X)
@@ -135,7 +133,7 @@ class SingleContextDecisionMaking(VariedLenCogTask):
     return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
 
 
-class ContextDecisionMaking(VariedLenCogTask):
+class ContextDecisionMaking(CognitiveTask):
   """Context-dependent decision-making task.
 
   The agent simultaneously receives stimulus inputs from two modalities (
@@ -155,12 +153,11 @@ class ContextDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float] = 300.,
-      t_stimulus: Union[int, float] = 750.,
-      t_delay: Union[int, float, Callable] = TruncExp(600, 300, 3000),
-      t_decision: Union[int, float] = 100.,
+      t_fixation: TimeDuration = 300.,
+      t_stimulus: TimeDuration = 750.,
+      t_delay: TimeDuration = TruncExp(600, 300, 3000),
+      t_decision: TimeDuration = 100.,
       noise_sigma: float = 1.0,
       num_trial: int = 1024,
       seed: Optional[int] = None,
@@ -170,19 +167,14 @@ class ContextDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
-                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
     # time related
-    self.t_fixation = bp.check.is_float(t_fixation, allow_int=True)
-    self.t_stimulus = bp.check.is_float(t_stimulus, allow_int=True)
-    self.t_decision = bp.check.is_float(t_decision, allow_int=True)
-    self._n_fixation = int(self.t_fixation / self.dt)
-    self._n_stimulus = int(self.t_stimulus / self.dt)
-    self._n_decision = int(self.t_decision / self.dt)
-    assert isinstance(t_delay, (int, float, Callable))
-    self.t_delay = t_delay
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_stimulus = is_time_duration(t_stimulus)
+    self.t_decision = is_time_duration(t_decision)
+    self.t_delay = is_time_duration(t_delay)
     self.noise_sigma = bp.check.is_float(noise_sigma, min_bound=0., allow_int=True)
 
     # input / output information
@@ -195,22 +187,19 @@ class ContextDecisionMaking(VariedLenCogTask):
   def num_input_feature(self):
     return len(self.input_features)
 
-  def sample_trial(self, item):
-    if isinstance(self.t_delay, (int, float)):
-      t_delay = self.t_delay
-    elif isinstance(self.t_delay, Callable):
-      t_delay = self.t_delay()
-    else:
-      raise ValueError
-    _n_delay = int(t_delay / self.dt)
-    n_total = self._n_fixation + self._n_stimulus + _n_delay + self._n_decision
+  def sample_a_trial(self, item):
+    _n_delay = int(initialize(self.t_delay) / self.dt)
+    _n_fixation = int(initialize(self.t_fixation) / self.dt)
+    _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    _n_decision = int(initialize(self.t_decision) / self.dt)
+    n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
 
-    time_info = {'fixation': self._n_fixation,
-                    'stimulus': self._n_stimulus,
-                    'delay': _n_delay,
-                    'decision': self._n_decision}
+    time_info = {'fixation': _n_fixation,
+                 'stimulus': _n_stimulus,
+                 'delay': _n_delay,
+                 'decision': _n_decision}
     feature_info = {f: 1 for f in self.input_features}
 
     choice_0 = ground_truth = self.rng.choice(self.choices)
@@ -238,7 +227,7 @@ class ContextDecisionMaking(VariedLenCogTask):
     stim = (1 - signed_coh_1 / 100) / 2
     X[ax0_stimulus, interval_of('stim2_mod2', feature_info)] += stim
 
-    rand = self.rng.randn(self._n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
+    rand = self.rng.randn(_n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
     X[ax0_stimulus, 1:] += rand
 
     if context == 0:
@@ -260,8 +249,7 @@ class ContextDecisionMaking(VariedLenCogTask):
     return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
 
 
-
-class PerceptualDecisionMaking(FixedLenCogTask):
+class PerceptualDecisionMaking(CognitiveTask):
   """"
   Two-alternative forced choice task in which the subject has to
   integrate two stimuli to decide which one is higher on average.
@@ -296,10 +284,10 @@ class PerceptualDecisionMaking(FixedLenCogTask):
   def __init__(
       self,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float] = 100.,
-      t_stimulus: Union[int, float] = 2000.,
-      t_delay: Union[int, float] = 0.,
-      t_decision: Union[int, float] = 100.,
+      t_fixation: TimeDuration = 100.,
+      t_stimulus: TimeDuration = 2000.,
+      t_delay: TimeDuration = 0.,
+      t_decision: TimeDuration = 100.,
       noise_sigma: float = 1.0,
       num_choice: int = 2,
       num_trial: int = 1024,
@@ -313,22 +301,13 @@ class PerceptualDecisionMaking(FixedLenCogTask):
                      num_trial=num_trial,
                      seed=seed)
     # time
-    self.t_fixation = bp.check.is_float(t_fixation, min_bound=0., allow_int=True)
-    self.t_stimulus = bp.check.is_float(t_stimulus, min_bound=0., allow_int=True)
-    self.t_delay = bp.check.is_float(t_delay, min_bound=0., allow_int=True)
-    self.t_decision = bp.check.is_float(t_decision, min_bound=0., allow_int=True)
-    self.noise_sigma = bp.check.is_float(noise_sigma, allow_int=True)
-    n_fixation = int(self.t_fixation / self.dt)
-    n_stimulus = int(self.t_stimulus / self.dt)
-    n_delay = int(self.t_delay / self.dt)
-    n_decision = int(self.t_decision / self.dt)
-    self._time_periods = dict()
-    self._time_periods['fixation'] = n_fixation
-    self._time_periods['stimulus'] = n_stimulus
-    self._time_periods['delay'] = n_delay
-    self._time_periods['decision'] = n_decision
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_stimulus = is_time_duration(t_stimulus)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_decision = is_time_duration(t_decision)
 
     # features
+    self.noise_sigma = bp.check.is_float(noise_sigma, allow_int=True)
     self.num_choice = bp.check.is_integer(num_choice, )
     self._feature_periods = {'fixation': 1, 'choice': num_choice}
     self._features = np.linspace(0, 2 * np.pi, self.num_choice + 1)[:-1]
@@ -338,13 +317,18 @@ class PerceptualDecisionMaking(FixedLenCogTask):
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
     self.input_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
 
-  @property
-  def num_input_feature(self):
-    return 1 + self.num_choice
-
-  def sample_trial(self, item):
-    total = sum(self._time_periods.values())
-    X = np.zeros((total, self.num_input_feature))
+  def sample_a_trial(self, item):
+    n_fixation = int(initialize(self.t_fixation) / self.dt)
+    n_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    n_delay = int(initialize(self.t_delay) / self.dt)
+    n_decision = int(initialize(self.t_decision) / self.dt)
+    _time_periods = dict()
+    _time_periods['fixation'] = n_fixation
+    _time_periods['stimulus'] = n_stimulus
+    _time_periods['delay'] = n_delay
+    _time_periods['decision'] = n_decision
+    total = sum(_time_periods.values())
+    X = np.zeros((total, 1 + self.num_choice))
     Y = np.zeros((total,), dtype=np.int_)
 
     coherence = self.rng.choice(self.coherence)
@@ -352,33 +336,33 @@ class PerceptualDecisionMaking(FixedLenCogTask):
     feature = self._features[ground_truth]
 
     ax1_fixation = interval_of('fixation', self._feature_periods)
-    ax0_fixation = interval_of('fixation', self._time_periods)
-    delay = interval_of('delay', self._time_periods)
     ax1_choice = interval_of('choice', self._feature_periods)
-    stimulus = interval_of('stimulus', self._time_periods)
-    decision = interval_of('decision', self._time_periods)
+    ax0_fixation = interval_of('fixation', _time_periods)
+    ax0_delay = interval_of('delay', _time_periods)
+    ax0_stimulus = interval_of('stimulus', _time_periods)
+    ax0_decision = interval_of('decision', _time_periods)
 
     X[ax0_fixation, ax1_fixation] += 1.
-    X[stimulus, ax1_fixation] += 1.
-    X[delay, ax1_fixation] += 1.
-    X[stimulus, ax1_choice] += np.cos(self._features - feature) * (coherence / 200) + 0.5
-    noise = self.rng.randn(self._time_periods['stimulus'], self.num_choice) * self.noise_sigma / np.sqrt(self.dt)
-    X[stimulus, ax1_choice] += noise
+    X[ax0_stimulus, ax1_fixation] += 1.
+    X[ax0_delay, ax1_fixation] += 1.
+    X[ax0_stimulus, ax1_choice] += np.cos(self._features - feature) * (coherence / 200) + 0.5
+    noise = self.rng.randn(_time_periods['stimulus'], self.num_choice) * self.noise_sigma / np.sqrt(self.dt)
+    X[ax0_stimulus, ax1_choice] += noise
 
-    Y[decision] = ground_truth + 1
+    Y[ax0_decision] = ground_truth + 1
 
     if self.input_transform is not None:
       X = self.input_transform(X)
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(self._time_periods.items())
+    dim0 = tuple(_time_periods.items())
     dim1 = tuple(self._feature_periods.items())
 
     return [X, {'ax0': dim0, 'ax1': dim1}], [Y, {'ax0': dim0}]
 
 
-class PulseDecisionMaking(VariedLenCogTask):
+class PulseDecisionMaking(CognitiveTask):
   """Pulse-based decision-making task.
 
   Discrete stimuli are presented briefly as pulses.
@@ -396,12 +380,11 @@ class PulseDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 10.,
-      t_fixation: Union[int, float] = 500.,
-      t_decision: Union[int, float] = 500.,
-      t_cue: Union[int, float] = 10.,
-      t_bin: Union[int, float] = 240.,
+      t_fixation: TimeDuration = 500.,
+      t_decision: TimeDuration = 500.,
+      t_cue: TimeDuration = 10.,
+      t_bin: TimeDuration = 240.,
       num_trial: int = 1024,
       p_pulse: Tuple[float, float] = (0.3, 0.7),
       n_bin: int = 6,
@@ -412,25 +395,14 @@ class PulseDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
-                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
     # time
-    self.t_fixation = bp.check.is_float(t_fixation, min_bound=0.)
-    self.t_decision = bp.check.is_float(t_decision, min_bound=0.)
-    self.t_cue = bp.check.is_float(t_cue, min_bound=0.)
-    self.t_bin = bp.check.is_float(t_bin, min_bound=0.)
-    self._n_fixation = int(self.t_fixation / self.dt)
-    self._n_cue = int(self.t_cue / self.dt)
-    self._n_bin = int(self.t_bin / self.dt)
-    self._n_decision = int(self.t_decision / self.dt)
-    self._n_total = self._n_fixation + (self._n_cue + self._n_bin) * n_bin + self._n_decision
-    self._time_info = {'fixation': self._n_fixation, }
-    for i in range(n_bin):
-      self._time_info[f'cue{i}'] = self._n_cue
-      self._time_info[f'bin{i}'] = self._n_bin
-    self._time_info['decision'] = self._n_decision
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_decision = is_time_duration(t_decision)
+    self.t_cue = is_time_duration(t_cue)
+    self.t_bin = is_time_duration(t_bin)
 
     self.p_pulse = bp.check.is_sequence(p_pulse, elem_type=float)
     self.n_bin = bp.check.is_integer(n_bin, allow_none=False)
@@ -439,9 +411,19 @@ class PulseDecisionMaking(VariedLenCogTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
 
-  def sample_trial(self, item):
-    X = np.zeros((self._n_total, len(self.input_features)))
-    Y = np.zeros(self._n_total, dtype=int)
+  def sample_a_trial(self, item):
+    _n_fixation = int(initialize(self.t_fixation) / self.dt)
+    _n_cue = int(initialize(self.t_cue) / self.dt)
+    _n_bin = int(initialize(self.t_bin) / self.dt)
+    _n_decision = int(initialize(self.t_decision) / self.dt)
+    _n_total = _n_fixation + (_n_cue + _n_bin) * self.n_bin + _n_decision
+    _time_info = {'fixation': _n_fixation, }
+    for i in range(self.n_bin):
+      _time_info[f'cue{i}'] = _n_cue
+      _time_info[f'bin{i}'] = _n_bin
+    _time_info['decision'] = _n_decision
+    X = np.zeros((_n_total, len(self.input_features)))
+    Y = np.zeros(_n_total, dtype=int)
 
     p1, p2 = self.p_pulse
     if self.rng.random() < 0.5:
@@ -454,25 +436,25 @@ class PulseDecisionMaking(VariedLenCogTask):
 
     X[:, 0] += 1.
     for i in range(self.n_bin):
-      start = self._n_fixation + (self._n_cue + self._n_bin) * i
-      end = start + self._n_cue
+      start = _n_fixation + (_n_cue + _n_bin) * i
+      end = start + _n_cue
       X[start: end, 1] += pulse1[i]
       X[start: end, 2] += pulse2[i]
-    X[self._n_total - self._n_decision:] = 0
+    X[_n_total - _n_decision:] = 0
 
-    Y[self._n_total - self._n_decision:] = ground_truth + 1
+    Y[_n_total - _n_decision:] = ground_truth + 1
 
     if self.input_transform is not None:
       X = self.input_transform(X)
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(self._time_info.items())
+    dim0 = tuple(_time_info.items())
     dim1 = [(feat, 1) for feat in self.input_features]
     return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 
 
-class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
+class PerceptualDecisionMakingDelayResponse(CognitiveTask):
   """Perceptual decision-making with delayed responses.
 
   Agents have to integrate two stimuli and report which one is
@@ -489,12 +471,11 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
 
   def __init__(
       self,
-      max_seq_len: int,
       dt: Union[int, float] = 10.,
-      t_fixation: Union[int, float] = 0.,
-      t_stimulus: Union[int, float] = 1150.,
-      t_delay: Union[int, float, Callable] = TruncExp(600, 300, 4000),
-      t_decision: Union[int, float] = 1500.,
+      t_fixation: TimeDuration = 0.,
+      t_stimulus: TimeDuration = 1150.,
+      t_delay: TimeDuration = TruncExp(600, 300, 4000),
+      t_decision: TimeDuration = 1500.,
       num_trial: int = 1024,
       seed: Optional[int] = None,
       noise_sigma: float = 1.0,
@@ -504,19 +485,14 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
-                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
     # time
-    self.t_fixation = bp.check.is_float(t_fixation, min_bound=0.)
-    self.t_decision = bp.check.is_float(t_decision, min_bound=0.)
-    self.t_stimulus = bp.check.is_float(t_stimulus, min_bound=0.)
-    assert isinstance(t_delay, (int, float, Callable))
-    self.t_delay = t_delay
-    self._n_fixation = int(self.t_fixation / self.dt)
-    self._n_decision = int(self.t_decision / self.dt)
-    self._n_stimulus = int(self.t_stimulus / self.dt)
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_decision = is_time_duration(t_decision)
+    self.t_stimulus = is_time_duration(t_stimulus)
+    self.t_delay = is_time_duration(t_delay)
 
     self.noise_sigma = bp.check.is_float(noise_sigma, allow_int=True)
 
@@ -528,22 +504,19 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
   def num_input_feature(self):
     return 3
 
-  def sample_trial(self, item):
-    if isinstance(self.t_delay, (int, float)):
-      t_delay = self.t_delay
-    elif isinstance(self.t_delay, Callable):
-      t_delay = self.t_delay()
-    else:
-      raise ValueError
-    _n_delay = int(t_delay / self.dt)
-    n_total = self._n_fixation + self._n_stimulus + _n_delay + self._n_decision
+  def sample_a_trial(self, item):
+    _n_fixation = int(initialize(self.t_fixation) / self.dt)
+    _n_decision = int(initialize(self.t_decision) / self.dt)
+    _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    _n_delay = int(initialize(self.t_delay) / self.dt)
+    n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
 
-    time_periods = {'fixation': self._n_fixation,
-                    'stimulus': self._n_stimulus,
+    time_periods = {'fixation': _n_fixation,
+                    'stimulus': _n_stimulus,
                     'delay': _n_delay,
-                    'decision': self._n_decision}
+                    'decision': _n_decision}
 
     ground_truth = self.rng.choice(self.choices)
     coherence = self.rng.choice(self.coherence)
@@ -555,7 +528,7 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
     X[ax0_stim, 0] = 1
     X[ax0_stim, 1:] = (1 - coherence / 100) / 2
     X[ax0_stim, ground_truth] = (1 + coherence / 100) / 2
-    X[ax0_stim, 1:] += self.rng.randn(self._n_stimulus, 2) * self.noise_sigma / np.sqrt(self.dt)
+    X[ax0_stim, 1:] += self.rng.randn(_n_stimulus, 2) * self.noise_sigma / np.sqrt(self.dt)
 
     ax0_delay = interval_of('delay', time_periods)
     X[ax0_delay] = [1, 0, 0]
@@ -572,5 +545,3 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
     dim0 = tuple(time_periods.items())
     dim1 = [(feat, 1) for feat in self.input_features]
     return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
-
-
