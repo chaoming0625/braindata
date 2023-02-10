@@ -1,5 +1,6 @@
 from brainpy_datasets._src.cognitive.base import (
   CognitiveTask as CognitiveTask,
+  TaskLoader as TaskLoader,
 )
 
 from brainpy_datasets._src.cognitive.decision_making import (

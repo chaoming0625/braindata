@@ -14,8 +14,6 @@ from typing import Any
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError
 
-import brainpy.math as bm
-import jax.numpy as jnp
 import numpy as np
 
 from .base import VisionDataset
@@ -110,7 +108,7 @@ class MNIST(VisionDataset):
   def _load_legacy_data(self):
     assert self.split in ['train', 'test']
     data_file = self._train_file if self.split == 'train' else self._test_file
-    return jnp.load(os.path.join(self._processed_folder, data_file))
+    return np.load(os.path.join(self._processed_folder, data_file))
 
   def _load_data(self):
     assert self.split in ['train', 'test']
@@ -445,7 +443,7 @@ class QMNIST(MNIST):
 
   def _load_data(self):
     data = read_sn3_pascalvincent_tensor(self.images_file)
-    assert data.dtype == jnp.uint8
+    assert data.dtype == np.uint8
     assert data.ndim == 3
 
     targets = read_sn3_pascalvincent_tensor(self.labels_file).astype(np.int64)
@@ -502,7 +500,7 @@ SN3_PASCALVINCENT_TYPEMAP = {
 }
 
 
-def read_sn3_pascalvincent_tensor(path: str, strict: bool = True) -> jnp.ndarray:
+def read_sn3_pascalvincent_tensor(path: str, strict: bool = True) -> np.ndarray:
   """Read a SN3 file in "Pascal Vincent" format (Lush file 'libidx/idx-io.lsh').
   Argument may be a filename, compressed filename, or file object.
   """
@@ -518,7 +516,7 @@ def read_sn3_pascalvincent_tensor(path: str, strict: bool = True) -> jnp.ndarray
   dtype = SN3_PASCALVINCENT_TYPEMAP[ty]
   s = [get_int(data[4 * (i + 1): 4 * (i + 2)]) for i in range(nd)]
 
-  num_bytes_per_value = jnp.iinfo(dtype).bits // 8
+  num_bytes_per_value = np.iinfo(dtype).bits // 8
   # The MNIST format uses the big endian byte order. If the system uses little endian byte order by default,
   # we need to reverse the bytes before we can read them with .frombuffer().
   needs_byte_reversal = sys.byteorder == "little" and num_bytes_per_value > 1
@@ -529,14 +527,14 @@ def read_sn3_pascalvincent_tensor(path: str, strict: bool = True) -> jnp.ndarray
   return parsed.reshape(*s)
 
 
-def read_label_file(path: str) -> jnp.ndarray:
+def read_label_file(path: str) -> np.ndarray:
   x = read_sn3_pascalvincent_tensor(path, strict=False)
   assert x.dtype == np.uint8
   assert x.ndim == 1
-  return x.astype(bm.float_)
+  return x.astype(np.float_)
 
 
-def read_image_file(path: str) -> jnp.ndarray:
+def read_image_file(path: str) -> np.ndarray:
   x = read_sn3_pascalvincent_tensor(path, strict=False)
   assert x.dtype == np.uint8
   assert x.ndim == 3

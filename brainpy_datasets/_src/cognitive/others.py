@@ -3,8 +3,9 @@ from typing import Union, Optional, Callable
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets._src.cognitive.base import FixedLenCogTask
+from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration, is_time_duration)
 from brainpy_datasets._src.cognitive.utils import interval_of
+from brainpy_datasets._src.utils.others import initialize
 
 __all__ = [
   'AntiReach',
@@ -12,7 +13,7 @@ __all__ = [
 ]
 
 
-class AntiReach(FixedLenCogTask):
+class AntiReach(CognitiveTask):
   """Anti-response task.
 
   During the fixation period, the agent fixates on a fixation point.
@@ -33,10 +34,10 @@ class AntiReach(FixedLenCogTask):
       self,
       dt: Union[int, float] = 100.,
       anti: bool = True,
-      t_fixation: Union[int, float] = 500.,
-      t_stimulus: Union[int, float] = 500.,
-      t_delay: Union[int, float] = 0.,
-      t_decision: Union[int, float] = 500.,
+      t_fixation: TimeDuration = 500.,
+      t_stimulus: TimeDuration = 500.,
+      t_delay: TimeDuration = 0.,
+      t_decision: TimeDuration = 500.,
       num_choice: int = 32,
       num_trial: int = 1024,
       seed: Optional[int] = None,
@@ -49,18 +50,10 @@ class AntiReach(FixedLenCogTask):
                      num_trial=num_trial,
                      seed=seed)
     # time
-    self.t_fixation = bp.check.is_float(t_fixation, min_bound=0., allow_int=True)
-    self.t_stimulus = bp.check.is_float(t_stimulus, min_bound=0., allow_int=True)
-    self.t_delay = bp.check.is_float(t_delay, min_bound=0., allow_int=True)
-    self.t_decision = bp.check.is_float(t_decision, min_bound=0., allow_int=True)
-    n_fixation = int(self.t_fixation / self.dt)
-    n_stimulus = int(self.t_stimulus / self.dt)
-    n_delay = int(self.t_delay / self.dt)
-    n_decision = int(self.t_decision / self.dt)
-    self._time_periods = {'fixation': n_fixation,
-                          'stimulus': n_stimulus,
-                          'delay': n_delay,
-                          'decision': n_decision, }
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_stimulus = is_time_duration(t_stimulus)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_decision = is_time_duration(t_decision)
 
     # features
     self.num_choice = bp.check.is_integer(num_choice, )
@@ -75,8 +68,16 @@ class AntiReach(FixedLenCogTask):
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
-    n_total = sum(self._time_periods.values())
+  def sample_a_trial(self, item):
+    n_fixation = int(initialize(self.t_fixation) / self.dt)
+    n_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    n_delay = int(initialize(self.t_delay) / self.dt)
+    n_decision = int(initialize(self.t_decision) / self.dt)
+    _time_periods = {'fixation': n_fixation,
+                          'stimulus': n_stimulus,
+                          'delay': n_delay,
+                          'decision': n_decision, }
+    n_total = sum(_time_periods.values())
     X = np.zeros((n_total, self.num_choice + 1))
     Y = np.zeros(n_total, dtype=int)
 
@@ -86,9 +87,9 @@ class AntiReach(FixedLenCogTask):
     else:
       stim_theta = self._features[ground_truth]
 
-    ax0_fixation = interval_of('fixation', self._time_periods)
-    ax0_stimulus = interval_of('stimulus', self._time_periods)
-    ax0_delay = interval_of('delay', self._time_periods)
+    ax0_fixation = interval_of('fixation', _time_periods)
+    ax0_stimulus = interval_of('stimulus', _time_periods)
+    ax0_delay = interval_of('delay', _time_periods)
     ax1_fixation = interval_of('fixation', self._feature_periods)
     ax1_choice = interval_of('choice', self._feature_periods)
 
@@ -99,17 +100,20 @@ class AntiReach(FixedLenCogTask):
     stim = np.cos(self._features - stim_theta)
     X[ax0_stimulus, ax1_choice] += stim
 
-    Y[interval_of('decision', self._time_periods)] = ground_truth + 1
+    Y[interval_of('decision', _time_periods)] = ground_truth + 1
 
     if self.input_transform is not None:
       X = self.input_transform(X)
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(_time_periods.items())
+    dim1 = [('fixation', 1), ('stimulus', self.num_choice)]
+
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 
 
-class Reaching1D(FixedLenCogTask):
+class Reaching1D(CognitiveTask):
   r"""Reaching to the stimulus.
 
     The agent is shown a stimulus during the fixation period. The stimulus
@@ -125,8 +129,8 @@ class Reaching1D(FixedLenCogTask):
   def __init__(
       self,
       dt: Union[int, float] = 100.,
-      t_fixation: Union[int, float] = 500.,
-      t_reach: Union[int, float] = 500.,
+      t_fixation: TimeDuration = 500.,
+      t_reach: TimeDuration = 500.,
       num_trial: int = 1024,
       num_choice: int = 2,
       seed: Optional[int] = None,
@@ -140,11 +144,9 @@ class Reaching1D(FixedLenCogTask):
                      seed=seed)
 
     # time
-    self.t_fixation = bp.check.is_float(t_fixation, min_bound=0., allow_int=True)
-    self.t_reach = bp.check.is_float(t_reach, min_bound=0., allow_int=True)
-    n_fixation = int(self.t_fixation / self.dt)
-    n_reach = int(self.t_reach / self.dt)
-    self._time_periods = {'fixation': n_fixation, 'reach': n_reach, }
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_reach =is_time_duration(t_reach)
+
 
     # features
     self.num_choice = bp.check.is_integer(num_choice)
@@ -155,16 +157,19 @@ class Reaching1D(FixedLenCogTask):
     self.output_features = ['fixation', 'left', 'right']
     self.input_features = [f'target{i}' for i in range(num_choice)] + [f'self{i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
-    n_total = sum(self._time_periods.values())
+  def sample_a_trial(self, item):
+    n_fixation = int(self.t_fixation / self.dt)
+    n_reach = int(self.t_reach / self.dt)
+    _time_periods = {'fixation': n_fixation, 'reach': n_reach, }
+    n_total = sum(_time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
 
     ground_truth = self.rng.uniform(0, np.pi * 2)
 
-    ax0_fixation = interval_of('fixation', self._time_periods)
+    ax0_fixation = interval_of('fixation', _time_periods)
+    ax0_reach = interval_of('reach', _time_periods)
     ax1_target = interval_of('target', self._feature_periods)
-    ax0_reach = interval_of('reach', self._time_periods)
 
     target = np.cos(self._features - ground_truth)
     X[ax0_reach, ax1_target] += target
@@ -177,5 +182,8 @@ class Reaching1D(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(_time_periods.items())
+    dim1 = [('target', self.num_choice), ('self', self.num_choice)]
+
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 

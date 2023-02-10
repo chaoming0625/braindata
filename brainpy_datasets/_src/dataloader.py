@@ -1,9 +1,11 @@
 import multiprocessing
 import queue
 from itertools import cycle
-from typing import TypeVar
+from typing import TypeVar, Callable
 
+import jax
 import jax.numpy as jnp
+import brainpy.math as bm
 import numpy as np
 
 from .base import Dataset
@@ -20,21 +22,21 @@ class DataLoader(object):
 
   Args:
     dataset (Dataset): dataset from which to load the data.
-    batch_size (int, optional): how many samples per batch to load (default: ``1``).
-    shuffle (bool, optional): set to ``True`` to have the data reshuffled
+    batch_size (int): how many samples per batch to load (default: ``1``).
+    shuffle (bool): set to ``True`` to have the data reshuffled
         at every epoch (default: ``False``).
-    num_workers (int, optional): how many subprocesses to use for data
+    num_workers (int): how many subprocesses to use for data
         loading. ``0`` means that the data will be loaded in the main process.
         (default: ``0``)
-    pin_memory (bool, optional): If ``True``, the data loader will copy Tensors
+    pin_memory (bool): If ``True``, the data loader will copy Tensors
         into device/CUDA pinned memory before returning them.  If your data elements
         are a custom type, or your :attr:`collate_fn` returns a batch that is a custom type,
         see the example below.
-    drop_last (bool, optional): set to ``True`` to drop the last incomplete batch,
+    drop_last (bool): set to ``True`` to drop the last incomplete batch,
         if the dataset size is not divisible by the batch size. If ``False`` and
         the size of dataset is not divisible by the batch size, then the last batch
         will be smaller. (default: ``False``)
-    prefetch_factor (int, optional, keyword-only arg): Number of batches loaded
+    prefetch_factor (int): Number of batches loaded
         in advance by each worker. ``2`` means there will be a total of
         2 * num_workers batches prefetched across all workers. (default: ``2``)
 
@@ -49,6 +51,7 @@ class DataLoader(object):
       drop_last: bool = False,
       pin_memory: bool = False,
       prefetch_factor: int = 2,
+      collate_fn: Callable = None,
   ):
     self.shuffle = shuffle
     self.drop_last = drop_last
@@ -57,6 +60,7 @@ class DataLoader(object):
     self.batch_size = batch_size
     self.num_workers = num_workers
     self.prefetch_factor = prefetch_factor
+    self._collate_fn = default_collate_fn if collate_fn is None else collate_fn
 
     self._index = 0
     self._index_prefetch = 0
@@ -70,7 +74,7 @@ class DataLoader(object):
       for _ in range(num_workers):
         index_queue = multiprocessing.Queue()
         worker = multiprocessing.Process(
-          target=_worker_fn,
+          target=self._worker_fn,
           args=(dataset, index_queue, self._output_queue)
         )
         worker.daemon = True
@@ -81,13 +85,20 @@ class DataLoader(object):
     self._prefetch()
 
   def __next__(self):
-    if self._index >= len(self.dataset):
+    batch = self.get_batch()
+    if batch is None:
       raise StopIteration
+    else:
+      return batch
+
+  def get_batch(self):
+    if self._index >= len(self.dataset):
+      return None
     batch_size = len(self.dataset) - self._index
     if self.drop_last and batch_size < self.batch_size:
-      raise StopIteration
+      return None
     batch_size = min(batch_size, self.batch_size)
-    return self._collate_fn([self._get() for _ in range(batch_size)])
+    return self._collate_fn(self, [self._get() for _ in range(batch_size)])
 
   def __iter__(self):
     self._index = 0
@@ -113,26 +124,26 @@ class DataLoader(object):
           w.terminate()
 
   def _get(self):
+    self._prefetch()
     if self.num_workers > 0:
-      self._prefetch()
       if self._index in self._cache:
-        item = self._cache[self._index]
+        data = self._cache[self._index]
         del self._cache[self._index]
       else:
         while True:
           try:
-            (index, data) = self._output_queue.get(timeout=0)
+            (index, thread_data) = self._output_queue.get(timeout=0)
           except queue.Empty:  # output queue empty, keep trying
             continue
           if index == self._index:  # found our item, ready to return
-            item = data
+            data = thread_data
             break
           else:  # item isn't the one we want, cache for later
-            self._cache[index] = data
+            self._cache[index] = thread_data
     else:
-      item = self.dataset[self._index]
+      data = self.dataset[self._index]
     self._index += 1
-    return item
+    return data
 
   def _prefetch(self):
     while ((self.num_workers > 0) and (self._index_prefetch < len(self.dataset)) and
@@ -142,22 +153,8 @@ class DataLoader(object):
       self._index_queues[next(self._worker_cycle)].put(self._index_prefetch)
       self._index_prefetch += 1
 
-  def _collate_fn(self, batch):
-    if isinstance(batch[0], np.ndarray):
-      data = np.stack(batch)
-      if self.pin_memory:
-        data = jnp.asarray(data)
-      return data
-    if isinstance(batch[0], (int, float)):
-      data = np.array(batch)
-      if self.pin_memory:
-        data = jnp.asarray(data)
-      return data
-    if isinstance(batch[0], (list, tuple)):
-      return tuple(self._collate_fn(var) for var in zip(*batch))
-
-
-def _worker_fn(dataset, index_queue, output_queue):
+  @staticmethod
+  def _worker_fn(dataset, index_queue, output_queue):
     while True:
       # Worker function, simply reads indices from index_queue, and adds the
       # dataset element to the output_queue
@@ -170,3 +167,20 @@ def _worker_fn(dataset, index_queue, output_queue):
       data = dataset[index]
       output_queue.put((index, data))
 
+
+def default_collate_fn(cls, batch):
+  if isinstance(batch[0], np.ndarray):
+    data = np.stack(batch)
+    if cls.pin_memory:
+      data = jnp.asarray(data)
+    return data
+  elif isinstance(batch[0], (jax.Array, bm.Array)):
+    data = bm.stack(batch)
+    return data
+  elif isinstance(batch[0], (int, float)):
+    data = np.array(batch)
+    if cls.pin_memory:
+      data = jnp.asarray(data)
+    return data
+  elif isinstance(batch[0], (list, tuple)):
+    return tuple(default_collate_fn(cls, var) for var in zip(*batch))
