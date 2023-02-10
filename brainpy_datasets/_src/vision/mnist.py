@@ -19,10 +19,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from .base import VisionDataset
-from brainpy_datasets.utils._data_utils_v2 import (download_and_extract_archive,
-                                                   extract_archive,
-                                                   verify_str_arg,
-                                                   check_integrity)
+from brainpy_datasets._src.utils._data_utils_v2 import (download_and_extract_archive,
+                                                        extract_archive,
+                                                        verify_str_arg,
+                                                        check_integrity)
 
 __all__ = [
   'MNIST',

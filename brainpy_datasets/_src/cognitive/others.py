@@ -3,8 +3,8 @@ from typing import Union, Optional, Callable
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets.cognitive.base import FixedLenCogTask
-from brainpy_datasets.cognitive.utils import interval_of
+from brainpy_datasets._src.cognitive.base import FixedLenCogTask
+from brainpy_datasets._src.cognitive.utils import interval_of
 
 __all__ = [
   'AntiReach',

@@ -3,10 +3,10 @@
 import os
 import os.path
 from typing import Any
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional
 
-from brainpy_datasets.base import Dataset
-from brainpy_datasets.transforms import TransformIT
+from brainpy_datasets._src.base import Dataset
+from brainpy_datasets._src.transforms import TransformIT
 
 __all__ = [
   'VisionDataset'

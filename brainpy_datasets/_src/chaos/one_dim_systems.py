@@ -5,7 +5,7 @@ from typing import Callable, Optional, Tuple
 import brainpy as bp
 from brainpy import math as bm
 from brainpy.types import Array
-from brainpy_datasets.transforms.base import TransformTX
+from brainpy_datasets._src.transforms.base import TransformTX
 from .base import ChaosDataset
 
 __all__ = [

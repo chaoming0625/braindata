@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from brainpy_datasets.utils import io_utils
+from brainpy_datasets._src.utils import io_utils
 
 __all__ = [
   'Progbar'

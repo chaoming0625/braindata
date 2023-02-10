@@ -9,7 +9,7 @@ import brainpy as bp
 from brainpy import math as bm
 from brainpy import odeint, IntegratorRunner
 from brainpy.types import Array
-from brainpy_datasets.transforms.base import TransformTXY
+from brainpy_datasets._src.transforms.base import TransformTXY
 from .base import ChaosDataset
 
 __all__ = [

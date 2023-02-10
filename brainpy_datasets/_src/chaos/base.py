@@ -2,7 +2,7 @@
 
 from typing import Any, Callable, List
 
-from brainpy_datasets.base import Dataset
+from brainpy_datasets._src.base import Dataset
 
 __all__ = [
   'ChaosDataset'
