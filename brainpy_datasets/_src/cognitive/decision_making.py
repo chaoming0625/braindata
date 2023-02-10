@@ -6,6 +6,7 @@ import brainpy as bp
 from brainpy_datasets._src.cognitive.base import VariedLenCogTask, FixedLenCogTask
 from brainpy_datasets._src.cognitive.utils import interval_of
 from brainpy_datasets._src.utils.random import TruncExp
+from brainpy_datasets._src.utils.others import initialize
 
 __all__ = [
   'SingleContextDecisionMaking',
@@ -38,6 +39,7 @@ class SingleContextDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 100.,
       t_fixation: Union[int, float] = 300.,
       t_stimulus: Union[int, float] = 750.,
@@ -54,6 +56,7 @@ class SingleContextDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -83,22 +86,23 @@ class SingleContextDecisionMaking(VariedLenCogTask):
         [f'stimulus 0-{i}' for i in range(num_choice)] +
         [f'stimulus 1-{i}' for i in range(num_choice)]
     )
+    self._feature_info = {'fixation': 1, 'stimulus 0': num_choice, 'stimulus 1': num_choice}
 
   @property
   def num_input_feature(self):
     return 1 + self.num_choice * 2
 
-  def __getitem__(self, item):
-    if isinstance(self.t_delay, (int, float)):
-      t_delay = self.t_delay
-    elif isinstance(self.t_delay, Callable):
-      t_delay = self.t_delay()
-    else:
-      raise ValueError
+  def sample_trial(self, item):
+    t_delay = initialize(self.t_delay)
     _n_delay = int(t_delay / self.dt)
     n_total = self._n_fixation + self._n_stimulus + _n_delay + self._n_decision
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
+
+    _time_info = {'fixation': self._n_fixation,
+                  'stimulus': self._n_stimulus,
+                  'delay': _n_delay,
+                  'decision': self._n_decision}
 
     choice_0 = ground_truth = self.rng.choice(self._choices)
     choice_1 = self.rng.choice(self._choices)
@@ -126,10 +130,9 @@ class SingleContextDecisionMaking(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
-
-  def __len__(self):
-    return self.num_trial
+    ax0 = tuple(_time_info.items())
+    ax1 = tuple(self._feature_info.items())
+    return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
 
 
 class ContextDecisionMaking(VariedLenCogTask):
@@ -152,6 +155,7 @@ class ContextDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 100.,
       t_fixation: Union[int, float] = 300.,
       t_stimulus: Union[int, float] = 750.,
@@ -166,6 +170,7 @@ class ContextDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -190,7 +195,7 @@ class ContextDecisionMaking(VariedLenCogTask):
   def num_input_feature(self):
     return len(self.input_features)
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     if isinstance(self.t_delay, (int, float)):
       t_delay = self.t_delay
     elif isinstance(self.t_delay, Callable):
@@ -202,11 +207,11 @@ class ContextDecisionMaking(VariedLenCogTask):
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
 
-    time_periods = {'fixation': self._n_fixation,
+    time_info = {'fixation': self._n_fixation,
                     'stimulus': self._n_stimulus,
                     'delay': _n_delay,
                     'decision': self._n_decision}
-    feature_periods = {f: 1 for f in self.input_features}
+    feature_info = {f: 1 for f in self.input_features}
 
     choice_0 = ground_truth = self.rng.choice(self.choices)
     choice_1 = self.rng.choice(self.choices)
@@ -218,30 +223,30 @@ class ContextDecisionMaking(VariedLenCogTask):
     signed_coh_0 = coh_0 if choice_0 == 1 else -coh_0
     signed_coh_1 = coh_1 if choice_1 == 1 else -coh_1
 
-    X[:, interval_of('fixation', feature_periods)] += 1.
+    X[:, interval_of('fixation', feature_info)] += 1.
 
-    ax0_stimulus = interval_of('stimulus', time_periods)
+    ax0_stimulus = interval_of('stimulus', time_info)
     stim = (1 + signed_coh_0 / 100) / 2
-    X[ax0_stimulus, interval_of('stim1_mod1', feature_periods)] += stim
+    X[ax0_stimulus, interval_of('stim1_mod1', feature_info)] += stim
 
     stim = (1 - signed_coh_0 / 100) / 2
-    X[ax0_stimulus, interval_of('stim2_mod1', feature_periods)] += stim
+    X[ax0_stimulus, interval_of('stim2_mod1', feature_info)] += stim
 
     stim = (1 + signed_coh_1 / 100) / 2
-    X[ax0_stimulus, interval_of('stim1_mod2', feature_periods)] += stim
+    X[ax0_stimulus, interval_of('stim1_mod2', feature_info)] += stim
 
     stim = (1 - signed_coh_1 / 100) / 2
-    X[ax0_stimulus, interval_of('stim2_mod2', feature_periods)] += stim
+    X[ax0_stimulus, interval_of('stim2_mod2', feature_info)] += stim
 
     rand = self.rng.randn(self._n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
     X[ax0_stimulus, 1:] += rand
 
     if context == 0:
-      X[:, interval_of('context1', feature_periods)] += 1.
+      X[:, interval_of('context1', feature_info)] += 1.
     else:
-      X[:, interval_of('context2', feature_periods)] += 1.
+      X[:, interval_of('context2', feature_info)] += 1.
 
-    Y[interval_of('decision', time_periods)] = ground_truth
+    Y[interval_of('decision', time_info)] = ground_truth
 
     if self.input_transform is not None:
       X = self.input_transform(X)
@@ -249,10 +254,10 @@ class ContextDecisionMaking(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = tuple(feature_info.items())
 
-  def __len__(self):
-    return self.num_trial
+    return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
 
 
 
@@ -331,12 +336,13 @@ class PerceptualDecisionMaking(FixedLenCogTask):
 
     # input / output information
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
+    self.input_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
 
   @property
   def num_input_feature(self):
     return 1 + self.num_choice
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     total = sum(self._time_periods.values())
     X = np.zeros((total, self.num_input_feature))
     Y = np.zeros((total,), dtype=np.int_)
@@ -366,7 +372,10 @@ class PerceptualDecisionMaking(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(self._time_periods.items())
+    dim1 = tuple(self._feature_periods.items())
+
+    return [X, {'ax0': dim0, 'ax1': dim1}], [Y, {'ax0': dim0}]
 
 
 class PulseDecisionMaking(VariedLenCogTask):
@@ -387,6 +396,7 @@ class PulseDecisionMaking(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 10.,
       t_fixation: Union[int, float] = 500.,
       t_decision: Union[int, float] = 500.,
@@ -402,6 +412,7 @@ class PulseDecisionMaking(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -415,6 +426,11 @@ class PulseDecisionMaking(VariedLenCogTask):
     self._n_bin = int(self.t_bin / self.dt)
     self._n_decision = int(self.t_decision / self.dt)
     self._n_total = self._n_fixation + (self._n_cue + self._n_bin) * n_bin + self._n_decision
+    self._time_info = {'fixation': self._n_fixation, }
+    for i in range(n_bin):
+      self._time_info[f'cue{i}'] = self._n_cue
+      self._time_info[f'bin{i}'] = self._n_bin
+    self._time_info['decision'] = self._n_decision
 
     self.p_pulse = bp.check.is_sequence(p_pulse, elem_type=float)
     self.n_bin = bp.check.is_integer(n_bin, allow_none=False)
@@ -423,12 +439,8 @@ class PulseDecisionMaking(VariedLenCogTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
 
-  @property
-  def num_input_feature(self):
-    return len(self.input_features)
-
-  def __getitem__(self, item):
-    X = np.zeros((self._n_total, self.num_input_feature))
+  def sample_trial(self, item):
+    X = np.zeros((self._n_total, len(self.input_features)))
     Y = np.zeros(self._n_total, dtype=int)
 
     p1, p2 = self.p_pulse
@@ -455,7 +467,9 @@ class PulseDecisionMaking(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(self._time_info.items())
+    dim1 = [(feat, 1) for feat in self.input_features]
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 
 
 class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
@@ -475,6 +489,7 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 10.,
       t_fixation: Union[int, float] = 0.,
       t_stimulus: Union[int, float] = 1150.,
@@ -489,6 +504,7 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -512,7 +528,7 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
   def num_input_feature(self):
     return 3
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     if isinstance(self.t_delay, (int, float)):
       t_delay = self.t_delay
     elif isinstance(self.t_delay, Callable):
@@ -549,9 +565,12 @@ class PerceptualDecisionMakingDelayResponse(VariedLenCogTask):
 
     if self.input_transform is not None:
       X = self.input_transform(X)
+
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(time_periods.items())
+    dim1 = [(feat, 1) for feat in self.input_features]
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 
 

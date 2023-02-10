@@ -75,7 +75,7 @@ class AntiReach(FixedLenCogTask):
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, self.num_choice + 1))
     Y = np.zeros(n_total, dtype=int)
@@ -106,7 +106,10 @@ class AntiReach(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(self._time_periods.items())
+    dim1 = [('fixation', 1), ('stimulus', self.num_choice)]
+
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 
 
 class Reaching1D(FixedLenCogTask):
@@ -155,7 +158,7 @@ class Reaching1D(FixedLenCogTask):
     self.output_features = ['fixation', 'left', 'right']
     self.input_features = [f'target{i}' for i in range(num_choice)] + [f'self{i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -177,5 +180,8 @@ class Reaching1D(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    dim0 = tuple(self._time_periods.items())
+    dim1 = [('target', self.num_choice), ('self', self.num_choice)]
+
+    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
 

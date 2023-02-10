@@ -89,7 +89,7 @@ class DelayComparison(FixedLenCogTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, 2))
     Y = np.zeros(n_total, dtype=int)
@@ -116,7 +116,10 @@ class DelayComparison(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [(f, 1) for f in self.input_features]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class DelayMatchCategory(FixedLenCogTask):
@@ -183,7 +186,7 @@ class DelayMatchCategory(FixedLenCogTask):
     self.output_features = ['fixation', 'match', 'non-match']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -216,7 +219,10 @@ class DelayMatchCategory(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [('fixation', 1), ('stimulus', self.num_choice)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class DelayMatchSample(FixedLenCogTask):
@@ -285,7 +291,7 @@ class DelayMatchSample(FixedLenCogTask):
     self.output_features = ['fixation', 'match', 'non-match']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -316,7 +322,10 @@ class DelayMatchSample(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [('fixation', 1), ('stimulus', self.num_choice)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class DelayPairedAssociation(FixedLenCogTask):
@@ -381,7 +390,7 @@ class DelayPairedAssociation(FixedLenCogTask):
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(4)]
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -409,7 +418,12 @@ class DelayPairedAssociation(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [('fixation', 1), ('stimulus', 4)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+
+
 
 
 class DualDelayMatchSample(FixedLenCogTask):
@@ -485,7 +499,7 @@ class DualDelayMatchSample(FixedLenCogTask):
                            'stimulus2-0', 'stimulus2-1',
                            'cue1', 'cue2']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -549,7 +563,11 @@ class DualDelayMatchSample(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [('fixation', 1), ('stimulus1', 2), ('stimulus2', 2), ('cue', 2)]
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+
+
 
 
 class GoNoGo(FixedLenCogTask):
@@ -610,7 +628,7 @@ class GoNoGo(FixedLenCogTask):
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation', 'nogo', 'go']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     n_total = sum(self._time_periods.values())
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
@@ -632,7 +650,10 @@ class GoNoGo(FixedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(self._time_periods.items())
+    ax1 = [('fixation', 1), ('nogo', 1), ('go', 1)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class IntervalDiscrimination(VariedLenCogTask):
@@ -651,6 +672,7 @@ class IntervalDiscrimination(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 100.,
       t_fixation: Union[int, float, Callable] = 300,
       t_stim1: Union[int, float, Callable] = None,
@@ -666,6 +688,7 @@ class IntervalDiscrimination(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
     if t_stim1 is None:
@@ -693,7 +716,7 @@ class IntervalDiscrimination(VariedLenCogTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     t_fixation = initialize(self.t_fixation)
     t_stim1 = initialize(self.t_stim1)
     t_delay1 = initialize(self.t_delay1)
@@ -732,7 +755,12 @@ class IntervalDiscrimination(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = [('fixation', 1), ('stimulus', 2)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+
+
 
 
 class PostDecisionWager(VariedLenCogTask):
@@ -754,6 +782,7 @@ class PostDecisionWager(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 80.,
       t_fixation: Union[int, float, Callable] = 300,
       t_stimulus: Union[int, float, Callable] = TruncExp(180, 100, 900),
@@ -770,6 +799,7 @@ class PostDecisionWager(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -796,7 +826,7 @@ class PostDecisionWager(VariedLenCogTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1', 'sure']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1', 'sure']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     t_fixation = initialize(self.t_fixation)
     t_stimulus = initialize(self.t_stimulus)
     t_delay = initialize(self.t_delay)
@@ -851,7 +881,10 @@ class PostDecisionWager(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = [('fixation', 1), ('stimulus', self.num_choice), ('sure', 1)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class ReadySetGo(VariedLenCogTask):
@@ -876,13 +909,13 @@ class ReadySetGo(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 80.,
       t_fixation: Union[int, float, Callable] = 100.,
       t_ready: Union[int, float, Callable] = 80.,
       t_measure: Union[int, float, Callable] = None,
       t_set: Union[int, float, Callable] = 80,
       num_trial: int = 1024,
-      num_choice: int = 2,
       gain=1,
       prod_margin=0.2,
       seed: Optional[int] = None,
@@ -892,6 +925,7 @@ class ReadySetGo(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
 
@@ -908,16 +942,11 @@ class ReadySetGo(VariedLenCogTask):
     self.t_measure = t_measure
     self.t_set = t_set
 
-    # features
-    self.num_choice = bp.check.is_integer(num_choice)
-    self._features = np.linspace(0, 2 * np.pi, num_choice + 1)[:-1]
-    self._feature_periods = {'target': num_choice, 'self': num_choice}
-
     # input / output information
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation', 'ready', 'set']
 
-  def __getitem__(self, item):
+  def sample_trial(self, item):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_reach = int(initialize(self.t_reach) / self.dt)
     t_measure = int(initialize(self.t_measure) / self.dt)
@@ -955,4 +984,9 @@ class ReadySetGo(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = [('fixation', 1), ('ready', 1), ('set', 1)]
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+
+

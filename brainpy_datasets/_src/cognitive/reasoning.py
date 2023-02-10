@@ -34,6 +34,7 @@ class HierarchicalReasoning(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 100.,
       t_fixation: Union[int, float, Callable] = TruncExp(600, 400, 800),
       t_rule_target: Union[int, float, Callable] = 1000.,
@@ -52,6 +53,7 @@ class HierarchicalReasoning(VariedLenCogTask):
                      target_transform=target_transform,
                      dt=dt,
                      num_trial=num_trial,
+                     max_seq_len=max_seq_len,
                      seed=seed)
     if t_delay is None:
       t_delay = lambda: self.rng.choice([530, 610, 690, 770, 850, 930, 1010, 1090, 1170])
@@ -81,7 +83,7 @@ class HierarchicalReasoning(VariedLenCogTask):
     self.input_features = ['fixation', 'rule 0', 'rule 1', 'stimulus 0', 'stimulus 1']
     self._feature_info = {'fixation': 1, 'rule': 2, 'choice': 2}
 
-  def __getitem__(self, index):
+  def sample_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_rule_target = int(initialize(self.t_rule_target) / self.dt)
     t_fixation2 = int(initialize(self.t_fixation2) / self.dt)
@@ -135,7 +137,10 @@ class HierarchicalReasoning(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = tuple(self._feature_info.items())
+
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
 
 
 class ProbabilisticReasoning(VariedLenCogTask):
@@ -164,6 +169,7 @@ class ProbabilisticReasoning(VariedLenCogTask):
 
   def __init__(
       self,
+      max_seq_len: int,
       dt: Union[int, float] = 100.,
       t_fixation: Union[int, float, Callable] = 500,
       t_stimulus: Union[int, float, Callable] = 500,
@@ -178,6 +184,7 @@ class ProbabilisticReasoning(VariedLenCogTask):
     super().__init__(input_transform=input_transform,
                      target_transform=target_transform,
                      dt=dt,
+                     max_seq_len=max_seq_len,
                      num_trial=num_trial,
                      seed=seed)
     if t_delay is None:
@@ -208,7 +215,7 @@ class ProbabilisticReasoning(VariedLenCogTask):
     for i in range(num_loc):
       self._feature_info[f'loc{i}'] = dim_shape
 
-  def __getitem__(self, index):
+  def sample_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_stimulus = int(initialize(self.t_stimulus) / self.dt)
     t_delay = int(initialize(self.t_delay) / self.dt)
@@ -250,4 +257,6 @@ class ProbabilisticReasoning(VariedLenCogTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y
+    ax0 = tuple(time_info.items())
+    ax1 = tuple(self._feature_info.items())
+    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
