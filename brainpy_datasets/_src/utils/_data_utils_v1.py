@@ -26,8 +26,8 @@ import jax.numpy as jnp
 import numpy as np
 from six.moves.urllib.parse import urlsplit
 
-from brainpy_datasets.utils import io_utils
-from brainpy_datasets.utils.progress import Progbar
+from brainpy_datasets._src.utils import io_utils
+from brainpy_datasets._src.utils.progress import Progbar
 
 
 def is_generator_or_sequence(x):

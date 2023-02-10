@@ -3,11 +3,11 @@ from typing import Union, Optional, Callable
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets.cognitive.base import FixedLenCogTask
-from brainpy_datasets.cognitive.base import VariedLenCogTask
-from brainpy_datasets.cognitive.utils import interval_of
-from brainpy_datasets.utils.others import initialize
-from brainpy_datasets.utils.random import TruncExp
+from brainpy_datasets._src.cognitive.base import FixedLenCogTask
+from brainpy_datasets._src.cognitive.base import VariedLenCogTask
+from brainpy_datasets._src.cognitive.utils import interval_of
+from brainpy_datasets._src.utils.others import initialize
+from brainpy_datasets._src.utils.random import TruncExp
 
 __all__ = [
   'DelayComparison',

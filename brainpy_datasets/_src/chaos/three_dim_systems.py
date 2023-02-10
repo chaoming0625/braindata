@@ -6,7 +6,7 @@ import brainpy as bp
 from brainpy import math as bm
 from brainpy import odeint, JointEq, IntegratorRunner
 from brainpy.types import Array
-from brainpy_datasets.transforms.base import TransformTXYZ
+from brainpy_datasets._src.transforms.base import TransformTXYZ
 from .base import ChaosDataset
 
 __all__ = [

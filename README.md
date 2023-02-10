@@ -3,8 +3,8 @@
 
 
 <p align="center">
-	<a href="https://pypi.org/project/brainpylib/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/brainpylib"></a>
-	<a href="https://github.com/PKU-NIP-Lab/brainpylib"><img alt="LICENSE" src="https://img.shields.io/badge/License-GPL_3.0-blue.svg"></a>
+	<a href="https://pypi.org/project/brainpy-datasets/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/brainpylib"></a>
+	<a href="https://github.com/brainpy/datasets"><img alt="LICENSE" src="https://img.shields.io/badge/License-GPL_3.0-blue.svg"></a>
 
 [//]: # (  	<a href="https://badge.fury.io/py/brainpylib"><img alt="PyPI version" src="https://badge.fury.io/py/brainpylib.svg"></a>)
 </p>
@@ -24,9 +24,15 @@ or auditory datasets.
 $ pip install brainpy-datasets -U
 ```
 
-## Citing
 
-If you are using `brainpy-datasets`, please consider citing [the corresponding papers](https://brainpy.readthedocs.io/en/latest/tutorial_FAQs/citing_and_publication.html). 
 
+## Acknowledgements
+
+We would like to thank following repos because we got so many inspirations from them:
+
+- https://github.com/pytorch/pytorch/tree/master/torch/utils/data
+- https://github.com/pytorch/vision
+- https://github.com/keras-team/keras
+- https://github.com/neurogym/neurogym
 
 

@@ -3,9 +3,9 @@ from typing import Union, Callable, Optional, Tuple
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets.cognitive.base import VariedLenCogTask, FixedLenCogTask
-from brainpy_datasets.cognitive.utils import interval_of
-from brainpy_datasets.utils.random import TruncExp
+from brainpy_datasets._src.cognitive.base import VariedLenCogTask, FixedLenCogTask
+from brainpy_datasets._src.cognitive.utils import interval_of
+from brainpy_datasets._src.utils.random import TruncExp
 
 __all__ = [
   'SingleContextDecisionMaking',

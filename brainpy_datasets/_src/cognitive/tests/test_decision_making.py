@@ -1,6 +1,6 @@
 from absl.testing import parameterized
 
-from brainpy_datasets.cognitive import decision_making
+from brainpy_datasets._src.cognitive import decision_making
 
 
 class TestContextDecisionMakingTask(parameterized.TestCase):
@@ -32,11 +32,11 @@ class TestPerceptualDecisionMakingTask(parameterized.TestCase):
   )
   def test_PulseDecisionMaking(self, t_cue, t_bin, t_fixation, t_decision, n_bin):
     task = decision_making.PulseDecisionMaking(t_cue=t_cue,
-                                          t_decision=t_decision,
-                                          t_fixation=t_fixation,
-                                          t_bin=t_bin,
-                                          n_bin=n_bin,
-                                          )
+                                               t_decision=t_decision,
+                                               t_fixation=t_fixation,
+                                               t_bin=t_bin,
+                                               n_bin=n_bin,
+                                               )
     X, Y = task[0]
 
     n = int(((t_cue + t_bin) * n_bin + t_fixation + t_decision) / 10)

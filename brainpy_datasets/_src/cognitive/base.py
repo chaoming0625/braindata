@@ -3,8 +3,9 @@ from typing import Callable, Optional, Any, Union, Sequence
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets.base import Dataset
-from brainpy_datasets.transforms.base import TransformIT
+from brainpy_datasets._src.base import Dataset
+from brainpy_datasets._src.dataloader import DataLoader
+from brainpy_datasets._src.transforms.base import TransformIT
 
 __all__ = [
   'CognitiveTask',
@@ -90,4 +91,10 @@ class FixedLenCogTask(CognitiveTask):
 
 class VariedLenCogTask(CognitiveTask):
   pass
+
+
+
+class TaskLoader(DataLoader):
+  pass
+
 

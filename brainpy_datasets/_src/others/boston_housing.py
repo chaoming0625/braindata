@@ -7,9 +7,9 @@ import os.path
 
 import numpy as np
 
-from brainpy_datasets.utils._data_utils_v1 import get_file
-from brainpy_datasets.utils._data_utils_v2 import check_integrity
-from brainpy_datasets.base import Dataset
+from brainpy_datasets._src.utils._data_utils_v1 import get_file
+from brainpy_datasets._src.utils._data_utils_v2 import check_integrity
+from brainpy_datasets._src.base import Dataset
 
 __all__ = [
   'BostonHousing'

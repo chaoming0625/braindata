@@ -9,8 +9,8 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from brainpy_datasets.utils._data_utils_v2 import (check_integrity,
-                                                   download_and_extract_archive)
+from brainpy_datasets._src.utils._data_utils_v2 import (check_integrity,
+                                                        download_and_extract_archive)
 from .base import VisionDataset
 
 
