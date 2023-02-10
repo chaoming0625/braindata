@@ -3,6 +3,9 @@
 
 __version__ = "0.0.0.3"
 
-from ._src import chaos, cognitive, others, vision
+
+from ._src.base import Dataset as Dataset
+from ._src.dataloader import DataLoader as DataLoader
+from . import chaos, cognitive, others, vision
 
 
