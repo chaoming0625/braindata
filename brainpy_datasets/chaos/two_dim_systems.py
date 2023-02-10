@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 
 
-from typing import Callable, Optional, Tuple, Any, List
+from typing import Callable, Optional, Tuple
+
+import jax.numpy as jnp
 
 import brainpy as bp
-import jax.numpy as jnp
 from brainpy import math as bm
-from brainpy.integrators import odeint, IntegratorRunner
+from brainpy import odeint, IntegratorRunner
 from brainpy.types import Array
-
+from brainpy_datasets.transforms.base import TransformTXY
 from .base import ChaosDataset
 
 __all__ = [
@@ -18,36 +19,6 @@ __all__ = [
 ]
 
 
-class StandardTransform:
-  def __init__(
-      self,
-      t_transform: Optional[Callable] = None,
-      x_transform: Optional[Callable] = None,
-      y_transform: Optional[Callable] = None,
-  ) -> None:
-    self.t_transform = t_transform
-    self.x_transform = x_transform
-    self.y_transform = y_transform
-
-  def __call__(self, t: Any, x: Any, y: Any) -> Tuple[Any, Any, Any]:
-    if self.t_transform is not None: t = self.t_transform(t)
-    if self.x_transform is not None: x = self.x_transform(x)
-    if self.y_transform is not None: y = self.y_transform(y)
-    return t, x, y
-
-  def _format_transform_repr(self, transform: Callable, head: str) -> List[str]:
-    lines = transform.__repr__().splitlines()
-    return [f"{head}{lines[0]}"] + ["{}{}".format(" " * len(head), line) for line in lines[1:]]
-
-  def __repr__(self) -> str:
-    body = [self.__class__.__name__]
-    if self.t_transform is not None:
-      body += self._format_transform_repr(self.t_transform, "T transform: ")
-    if self.x_transform is not None:
-      body += self._format_transform_repr(self.x_transform, "X transform: ")
-    if self.y_transform is not None:
-      body += self._format_transform_repr(self.y_transform, "Y transform: ")
-    return "\n".join(body)
 
 
 class TwoDimChaosData(ChaosDataset):
@@ -64,7 +35,7 @@ class TwoDimChaosData(ChaosDataset):
     self.t_transform = t_transform
     self.x_transform = x_transform
     self.y_transform = y_transform
-    self.transforms = StandardTransform(t_transform, x_transform, y_transform)
+    self.transforms = TransformTXY(t_transform, x_transform, y_transform)
 
   def __len__(self):
     return self.ts.size

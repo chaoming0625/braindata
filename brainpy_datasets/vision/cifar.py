@@ -9,8 +9,8 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from brainpy_datasets._data_utils_v2 import (check_integrity,
-                                             download_and_extract_archive)
+from brainpy_datasets.utils._data_utils_v2 import (check_integrity,
+                                                   download_and_extract_archive)
 from .base import VisionDataset
 
 
@@ -22,7 +22,7 @@ class CIFAR10(VisionDataset):
           ``cifar-10-batches-py`` exists or will be saved to if download is set to True.
       split (str): If 'train', creates dataset from training set, otherwise
           creates from test set.
-      transform (callable, optional): A function/transform that takes in an PIL image
+      input_transform (callable, optional): A function/transform that takes in an PIL image
           and returns a transformed version. E.g, ``transforms.RandomCrop``
       target_transform (callable, optional): A function/transform that takes in the
           target and transforms it.
@@ -57,12 +57,12 @@ class CIFAR10(VisionDataset):
       self,
       root: str,
       split: str,
-      transform: Optional[Callable] = None,
+      input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
       download: bool = False,
   ) -> None:
 
-    super().__init__(root, transform=transform, target_transform=target_transform)
+    super().__init__(root, input_transform=input_transform, target_transform=target_transform)
 
     assert split in ['train', 'test']
     self.split = split

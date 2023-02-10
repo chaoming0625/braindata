@@ -19,10 +19,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from .base import VisionDataset
-from brainpy_datasets._data_utils_v2 import (download_and_extract_archive,
-                                             extract_archive,
-                                             verify_str_arg,
-                                             check_integrity)
+from brainpy_datasets.utils._data_utils_v2 import (download_and_extract_archive,
+                                                   extract_archive,
+                                                   verify_str_arg,
+                                                   check_integrity)
 
 __all__ = [
   'MNIST',
@@ -44,18 +44,18 @@ class MNIST(VisionDataset):
       download (bool, optional): If True, downloads the dataset from the internet and
           puts it in root directory. If dataset is already downloaded, it is not
           downloaded again.
-      transform (callable, optional): A function/transform that  takes in an PIL image
+      input_transform (callable, optional): A function/transform that  takes in an PIL image
           and returns a transformed version. E.g, ``transforms.RandomCrop``
       target_transform (callable, optional): A function/transform that takes in the
           target and transforms it.
   """
 
-  mirrors = [
+  _mirrors = [
     "http://yann.lecun.com/exdb/mnist/",
     "https://ossci-datasets.s3.amazonaws.com/mnist/",
   ]
 
-  resources = [
+  _resources = [
     ("train-images-idx3-ubyte.gz", "f68b3c2dcbeaaa9fbdd348bbdeb94873"),
     ("train-labels-idx1-ubyte.gz", "d53e105ee54ea40749a09fcbcd1e9432"),
     ("t10k-images-idx3-ubyte.gz", "9fb629c4189551a2d022fa330f9573f3"),
@@ -81,11 +81,11 @@ class MNIST(VisionDataset):
       self,
       root: str,
       split: str = 'train',
-      transform: Optional[Callable] = None,
+      input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
       download: bool = False,
   ) -> None:
-    super().__init__(root, transform=transform, target_transform=target_transform)
+    super().__init__(root, input_transform=input_transform, target_transform=target_transform)
     self.split = split  # training set or test set
 
     if self._check_legacy_exist():
@@ -101,25 +101,25 @@ class MNIST(VisionDataset):
     self.data, self.targets = self._load_data()
 
   def _check_legacy_exist(self):
-    processed_folder_exists = os.path.exists(self.processed_folder)
+    processed_folder_exists = os.path.exists(self._processed_folder)
     if not processed_folder_exists:
       return False
-    return all(check_integrity(os.path.join(self.processed_folder, file))
+    return all(check_integrity(os.path.join(self._processed_folder, file))
                for file in (self._train_file, self._test_file))
 
   def _load_legacy_data(self):
     assert self.split in ['train', 'test']
     data_file = self._train_file if self.split == 'train' else self._test_file
-    return jnp.load(os.path.join(self.processed_folder, data_file))
+    return jnp.load(os.path.join(self._processed_folder, data_file))
 
   def _load_data(self):
     assert self.split in ['train', 'test']
 
     image_file = f"{'train' if self.split == 'train' else 't10k'}-images-idx3-ubyte"
-    data = read_image_file(os.path.join(self.raw_folder, image_file))
+    data = read_image_file(os.path.join(self._raw_folder, image_file))
 
     label_file = f"{'train' if self.split == 'train' else 't10k'}-labels-idx1-ubyte"
-    targets = read_label_file(os.path.join(self.raw_folder, label_file))
+    targets = read_label_file(os.path.join(self._raw_folder, label_file))
 
     return data, targets
 
@@ -131,10 +131,11 @@ class MNIST(VisionDataset):
     Returns:
         tuple: (image, target) where target is index of the target class.
     """
-    img, target = self.data[index], self.targets[index]
+    img = self.data[index]
+    target = self.targets[index]
 
-    if self.transform is not None:
-      img = self.transform(img)
+    if self.input_transform is not None:
+      img = self.input_transform(img)
 
     if self.target_transform is not None:
       target = self.target_transform(target)
@@ -145,11 +146,11 @@ class MNIST(VisionDataset):
     return len(self.data)
 
   @property
-  def raw_folder(self) -> str:
+  def _raw_folder(self) -> str:
     return os.path.join(self.root, self.__class__.__name__, "raw")
 
   @property
-  def processed_folder(self) -> str:
+  def _processed_folder(self) -> str:
     return os.path.join(self.root, self.__class__.__name__, "processed")
 
   @property
@@ -157,8 +158,8 @@ class MNIST(VisionDataset):
     return {_class: i for i, _class in enumerate(self.classes)}
 
   def _check_exists(self) -> bool:
-    return all(check_integrity(os.path.join(self.raw_folder, os.path.splitext(os.path.basename(url))[0]))
-               for url, _ in self.resources)
+    return all(check_integrity(os.path.join(self._raw_folder, os.path.splitext(os.path.basename(url))[0]))
+               for url, _ in self._resources)
 
   def _download(self) -> None:
     """Download the MNIST data if it doesn't exist already."""
@@ -166,15 +167,15 @@ class MNIST(VisionDataset):
     if self._check_exists():
       return
 
-    os.makedirs(self.raw_folder, exist_ok=True)
+    os.makedirs(self._raw_folder, exist_ok=True)
 
     # download files
-    for filename, md5 in self.resources:
-      for mirror in self.mirrors:
+    for filename, md5 in self._resources:
+      for mirror in self._mirrors:
         url = f"{mirror}{filename}"
         try:
           print(f"Downloading {url}")
-          download_and_extract_archive(url, download_root=self.raw_folder, filename=filename, md5=md5)
+          download_and_extract_archive(url, download_root=self._raw_folder, filename=filename, md5=md5)
         except URLError as error:
           print(f"Failed to download (trying next):\n{error}")
           continue
@@ -205,9 +206,9 @@ class FashionMNIST(MNIST):
           target and transforms it.
   """
 
-  mirrors = ["http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/"]
+  _mirrors = ["http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/"]
 
-  resources = [
+  _resources = [
     ("train-images-idx3-ubyte.gz", "8d4fb7e6c68d591d4c3dfef9ec88bf0d"),
     ("train-labels-idx1-ubyte.gz", "25c81989df183df01b3e8a0aad5dffbe"),
     ("t10k-images-idx3-ubyte.gz", "bef4ecab320f06d8554ea6380940ec79"),
@@ -233,9 +234,9 @@ class KMNIST(MNIST):
           target and transforms it.
   """
 
-  mirrors = ["http://codh.rois.ac.jp/kmnist/dataset/kmnist/"]
+  _mirrors = ["http://codh.rois.ac.jp/kmnist/dataset/kmnist/"]
 
-  resources = [
+  _resources = [
     ("train-images-idx3-ubyte.gz", "bdb82020997e1d708af4cf47b453dcf7"),
     ("train-labels-idx1-ubyte.gz", "e144d726b3acfaa3e44228e80efcd344"),
     ("t10k-images-idx3-ubyte.gz", "5c965bf0a639b31b8f53240b1b52f4d7"),
@@ -258,7 +259,7 @@ class EMNIST(MNIST):
       download (bool, optional): If True, downloads the dataset from the internet and
           puts it in root directory. If dataset is already downloaded, it is not
           downloaded again.
-      transform (callable, optional): A function/transform that  takes in an PIL image
+      input_transform (callable, optional): A function/transform that  takes in an PIL image
           and returns a transformed version. E.g, ``transforms.RandomCrop``
       target_transform (callable, optional): A function/transform that takes in the
           target and transforms it.
@@ -284,7 +285,7 @@ class EMNIST(MNIST):
       root: str,
       category: str,
       split: str,
-      transform: Optional[Callable] = None,
+      input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
       download: bool = False,
   ):
@@ -293,7 +294,7 @@ class EMNIST(MNIST):
     self.test_file = f"test_{split}.pt"
     super().__init__(root,
                      split=split,
-                     transform=transform,
+                     input_transform=input_transform,
                      target_transform=target_transform,
                      download=download)
     self.classes = self.classes_split_dict[self.category]
@@ -304,11 +305,11 @@ class EMNIST(MNIST):
 
   @property
   def images_file(self) -> str:
-    return os.path.join(self.raw_folder, f"{self._file_prefix}-images-idx3-ubyte")
+    return os.path.join(self._raw_folder, f"{self._file_prefix}-images-idx3-ubyte")
 
   @property
   def labels_file(self) -> str:
-    return os.path.join(self.raw_folder, f"{self._file_prefix}-labels-idx1-ubyte")
+    return os.path.join(self._raw_folder, f"{self._file_prefix}-labels-idx1-ubyte")
 
   def _load_data(self):
     return read_image_file(self.images_file), read_label_file(self.labels_file)
@@ -320,12 +321,12 @@ class EMNIST(MNIST):
     """Download the EMNIST data if it doesn't exist already."""
     if self._check_exists():
       return
-    os.makedirs(self.raw_folder, exist_ok=True)
-    download_and_extract_archive(self.url, download_root=self.raw_folder, md5=self.md5)
-    gzip_folder = os.path.join(self.raw_folder, "gzip")
+    os.makedirs(self._raw_folder, exist_ok=True)
+    download_and_extract_archive(self.url, download_root=self._raw_folder, md5=self.md5)
+    gzip_folder = os.path.join(self._raw_folder, "gzip")
     for gzip_file in os.listdir(gzip_folder):
       if gzip_file.endswith(".gz"):
-        extract_archive(os.path.join(gzip_folder, gzip_file), self.raw_folder)
+        extract_archive(os.path.join(gzip_folder, gzip_file), self._raw_folder)
     shutil.rmtree(gzip_folder)
 
   def extra_repr(self) -> str:
@@ -352,7 +353,7 @@ class QMNIST(MNIST):
       download (bool, optional): If True, downloads the dataset from
           the internet and puts it in root directory. If dataset is
           already downloaded, it is not downloaded again.
-      transform (callable, optional): A function/transform that
+      input_transform (callable, optional): A function/transform that
           takes in an PIL image and returns a transformed
           version. E.g, ``transforms.RandomCrop``
       target_transform (callable, optional): A function/transform
@@ -364,7 +365,7 @@ class QMNIST(MNIST):
              "test10k": "test",
              "test50k": "test",
              "nist": "nist"}
-  resources: Dict[str, List[Tuple[str, str]]] = {  # type: ignore[assignment]
+  _resources: Dict[str, List[Tuple[str, str]]] = {  # type: ignore[assignment]
     "train": [
       (
         "https://raw.githubusercontent.com/facebookresearch/qmnist/master/qmnist-train-images-idx3-ubyte.gz",
@@ -414,7 +415,7 @@ class QMNIST(MNIST):
       root: str,
       split: str,
       compat: bool = True,
-      transform: Optional[Callable] = None,
+      input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
       download: bool = False,
   ) -> None:
@@ -425,19 +426,19 @@ class QMNIST(MNIST):
     self.test_file = self.data_file
     super().__init__(root,
                      split,
-                     transform=transform,
+                     input_transform=input_transform,
                      target_transform=target_transform,
                      download=download)
 
   @property
   def images_file(self) -> str:
-    (url, _), _ = self.resources[self.subsets[self.category]]
-    return os.path.join(self.raw_folder, os.path.splitext(os.path.basename(url))[0])
+    (url, _), _ = self._resources[self.subsets[self.category]]
+    return os.path.join(self._raw_folder, os.path.splitext(os.path.basename(url))[0])
 
   @property
   def labels_file(self) -> str:
-    _, (url, _) = self.resources[self.subsets[self.category]]
-    return os.path.join(self.raw_folder, os.path.splitext(os.path.basename(url))[0])
+    _, (url, _) = self._resources[self.subsets[self.category]]
+    return os.path.join(self._raw_folder, os.path.splitext(os.path.basename(url))[0])
 
   def _check_exists(self) -> bool:
     return all(check_integrity(file) for file in (self.images_file, self.labels_file))
@@ -466,17 +467,17 @@ class QMNIST(MNIST):
     if self._check_exists():
       return
 
-    os.makedirs(self.raw_folder, exist_ok=True)
-    split = self.resources[self.subsets[self.category]]
+    os.makedirs(self._raw_folder, exist_ok=True)
+    split = self._resources[self.subsets[self.category]]
 
     for url, md5 in split:
-      download_and_extract_archive(url, self.raw_folder, md5=md5)
+      download_and_extract_archive(url, self._raw_folder, md5=md5)
 
   def __getitem__(self, index: int) -> Tuple[Any, Any]:
     # redefined to handle the compat flag
     img, target = self.data[index], self.targets[index]
-    if self.transform is not None:
-      img = self.transform(img)
+    if self.input_transform is not None:
+      img = self.input_transform(img)
     if self.compat:
       target = int(target[0])
     if self.target_transform is not None:
