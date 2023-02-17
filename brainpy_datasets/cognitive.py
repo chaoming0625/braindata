@@ -1,6 +1,7 @@
 from brainpy_datasets._src.cognitive.base import (
   CognitiveTask as CognitiveTask,
   TaskLoader as TaskLoader,
+  Feature as Feature,
 )
 
 from brainpy_datasets._src.cognitive.decision_making import (
@@ -14,6 +15,7 @@ from brainpy_datasets._src.cognitive.decision_making import (
 from brainpy_datasets._src.cognitive.others import (
   AntiReach as AntiReach,
   Reaching1D as Reaching1D,
+  EvidenceAccumulation as EvidenceAccumulation,
 )
 
 from brainpy_datasets._src.cognitive.reasoning import (

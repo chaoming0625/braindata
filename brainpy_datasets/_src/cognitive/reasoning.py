@@ -1,11 +1,12 @@
 from typing import Union, Callable, Optional
 
-import numpy as np
 import brainpy as bp
-from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration, is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of
-from brainpy_datasets._src.utils.random import TruncExp
+import numpy as np
+
+from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration)
+from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.others import initialize
+from brainpy_datasets._src.utils.random import TruncExp
 
 __all__ = [
   'HierarchicalReasoning',
@@ -135,10 +136,7 @@ class HierarchicalReasoning(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    ax0 = tuple(time_info.items())
-    ax1 = tuple(self._feature_info.items())
-
-    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+    return X, Y, period_to_arr(time_info)
 
 
 class ProbabilisticReasoning(CognitiveTask):
@@ -253,6 +251,4 @@ class ProbabilisticReasoning(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    ax0 = tuple(time_info.items())
-    ax1 = tuple(self._feature_info.items())
-    return [X, dict(ax0=ax0, ax1=ax1)], [Y, dict(ax0=ax0)]
+    return X, Y, period_to_arr(time_info)

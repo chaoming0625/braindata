@@ -5,8 +5,9 @@ import numpy as np
 import brainpy as bp
 from brainpy_datasets._src.cognitive.base import (CognitiveTask,
                                                   TimeDuration,
+                                                  Feature,
                                                   is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of
+from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.random import TruncExp
 from brainpy_datasets._src.utils.others import initialize
 
@@ -89,18 +90,17 @@ class SingleContextDecisionMaking(CognitiveTask):
     return 1 + self.num_choice * 2
 
   def sample_a_trial(self, item):
-    _n_delay = int(initialize(self.t_delay) / self.dt)
-    _n_fixation = int(initialize(self.t_fixation) / self.dt)
-    _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
-    _n_decision = int(initialize(self.t_decision) / self.dt)
-    n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
+    t_delay = int(initialize(self.t_delay) / self.dt)
+    t_fixation = int(initialize(self.t_fixation) / self.dt)
+    t_stimulus = int(initialize(self.t_stimulus) / self.dt)
+    t_decision = int(initialize(self.t_decision) / self.dt)
+    n_total = t_fixation + t_stimulus + t_delay + t_decision
     X = np.zeros((n_total, self.num_input_feature))
     Y = np.zeros((n_total,), dtype=int)
-
-    _time_info = {'fixation': _n_fixation,
-                  'stimulus': _n_stimulus,
-                  'delay': _n_delay,
-                  'decision': _n_decision}
+    _time_info = {'fixation': t_fixation,
+                  'stimulus': t_stimulus,
+                  'delay': t_delay,
+                  'decision': t_decision}
 
     choice_0 = ground_truth = self.rng.choice(self._choices)
     choice_1 = self.rng.choice(self._choices)
@@ -113,14 +113,13 @@ class SingleContextDecisionMaking(CognitiveTask):
 
     X[:, 0] = 1.
     stim = np.cos(self._features - stim_theta_0) * (coh_0 / 200) + 0.5
-    X[_n_fixation: _n_fixation + _n_stimulus, 1:self.num_choice + 1] += stim
+    X[t_fixation: t_fixation + t_stimulus, 1:self.num_choice + 1] += stim
     stim = np.cos(self._features - stim_theta_1) * (coh_1 / 200) + 0.5
-    X[_n_fixation: _n_fixation + _n_stimulus, self.num_choice + 1:] += stim
-    rand = self.rng.randn(_n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
-    X[_n_fixation: _n_fixation + _n_stimulus, 1:] += rand
-    X[_n_fixation + _n_stimulus + _n_delay:] = 0.
-
-    Y[_n_fixation + _n_stimulus + _n_delay:] = ground_truth + 1
+    X[t_fixation: t_fixation + t_stimulus, self.num_choice + 1:] += stim
+    rand = self.rng.randn(t_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
+    X[t_fixation: t_fixation + t_stimulus, 1:] += rand
+    X[t_fixation + t_stimulus + t_delay:] = 0.
+    Y[t_fixation + t_stimulus + t_delay:] = ground_truth + 1
 
     if self.input_transform is not None:
       X = self.input_transform(X)
@@ -128,9 +127,7 @@ class SingleContextDecisionMaking(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    ax0 = tuple(_time_info.items())
-    ax1 = tuple(self._feature_info.items())
-    return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
+    return X, Y, period_to_arr(_time_info)
 
 
 class ContextDecisionMaking(CognitiveTask):
@@ -243,10 +240,7 @@ class ContextDecisionMaking(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    ax0 = tuple(time_info.items())
-    ax1 = tuple(feature_info.items())
-
-    return [X, {'ax0': ax0, 'ax1': ax1}], [Y, {'ax0': ax0}]
+    return X, Y, period_to_arr(time_info)
 
 
 class PerceptualDecisionMaking(CognitiveTask):
@@ -269,8 +263,8 @@ class PerceptualDecisionMaking(CognitiveTask):
       num_choice: int. Number of input choices.
       num_trial: int. The total number of trial in one epoch.
       seed: int. Random seed.
-      input_transform:
-      target_transform:
+      input_transform (Callable): The function to transform the input data.
+      target_transform (Callable): The function to transform the target data.
   """
 
   metadata = {
@@ -353,13 +347,11 @@ class PerceptualDecisionMaking(CognitiveTask):
 
     if self.input_transform is not None:
       X = self.input_transform(X)
+      
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(_time_periods.items())
-    dim1 = tuple(self._feature_periods.items())
-
-    return [X, {'ax0': dim0, 'ax1': dim1}], [Y, {'ax0': dim0}]
+    return X, Y, period_to_arr(_time_periods)
 
 
 class PulseDecisionMaking(CognitiveTask):
@@ -449,9 +441,7 @@ class PulseDecisionMaking(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(_time_info.items())
-    dim1 = [(feat, 1) for feat in self.input_features]
-    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
+    return X, Y, period_to_arr(_time_info)
 
 
 class PerceptualDecisionMakingDelayResponse(CognitiveTask):
@@ -476,9 +466,12 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
       t_stimulus: TimeDuration = 1150.,
       t_delay: TimeDuration = TruncExp(600, 300, 4000),
       t_decision: TimeDuration = 1500.,
+      f_fixation: Feature = Feature(1, 20, 100.),
+      f_stimulus: Feature = Feature(2, 20, 100.),
       num_trial: int = 1024,
       seed: Optional[int] = None,
       noise_sigma: float = 1.0,
+      mode: str = 'rate',
       input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
   ):
@@ -494,15 +487,17 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
     self.t_stimulus = is_time_duration(t_stimulus)
     self.t_delay = is_time_duration(t_delay)
 
+    # features
+    assert mode == 'rate'
+    f_fixation = f_fixation.set_name('fixation')
+    f_stimulus = f_stimulus.set_name('stimulus')
+    self.features = f_fixation + f_stimulus
+    self.features.set_mode(mode)
     self.noise_sigma = bp.check.is_float(noise_sigma, allow_int=True)
 
     # input / output information
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
-
-  @property
-  def num_input_feature(self):
-    return 3
 
   def sample_a_trial(self, item):
     _n_fixation = int(initialize(self.t_fixation) / self.dt)
@@ -510,7 +505,7 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
     _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
     _n_delay = int(initialize(self.t_delay) / self.dt)
     n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
-    X = np.zeros((n_total, self.num_input_feature))
+    X = np.zeros((n_total, self.features.num))
     Y = np.zeros((n_total,), dtype=int)
 
     time_periods = {'fixation': _n_fixation,
@@ -522,18 +517,18 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
     coherence = self.rng.choice(self.coherence)
 
     ax0_fixation = interval_of('fixation', time_periods)
-    X[ax0_fixation] = [1, 0, 0]
-
     ax0_stim = interval_of('stimulus', time_periods)
-    X[ax0_stim, 0] = 1
+    ax0_delay = interval_of('delay', time_periods)
+    ax0_decision = interval_of('decision', time_periods)
+
+    X[ax0_fixation, self.features['fixation'].i] = self.features['fixation'].fr(self.dt)
+    X[ax0_stim, self.features['fixation'].i] = self.features['fixation'].fr(self.dt)
+    X[ax0_delay, self.features['fixation'].i] = self.features['fixation'].fr(self.dt)
+
     X[ax0_stim, 1:] = (1 - coherence / 100) / 2
     X[ax0_stim, ground_truth] = (1 + coherence / 100) / 2
     X[ax0_stim, 1:] += self.rng.randn(_n_stimulus, 2) * self.noise_sigma / np.sqrt(self.dt)
 
-    ax0_delay = interval_of('delay', time_periods)
-    X[ax0_delay] = [1, 0, 0]
-
-    ax0_decision = interval_of('decision', time_periods)
     Y[ax0_decision] = ground_truth
 
     if self.input_transform is not None:
@@ -542,6 +537,4 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(time_periods.items())
-    dim1 = [(feat, 1) for feat in self.input_features]
-    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
+    return X, Y, period_to_arr(time_periods)

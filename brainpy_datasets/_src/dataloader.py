@@ -1,7 +1,10 @@
 import multiprocessing
 import queue
+import time
 from itertools import cycle
-from typing import TypeVar, Callable
+from typing import TypeVar, Callable, List
+
+import psutil
 
 import jax
 import jax.numpy as jnp
@@ -39,6 +42,9 @@ class DataLoader(object):
     prefetch_factor (int): Number of batches loaded
         in advance by each worker. ``2`` means there will be a total of
         2 * num_workers batches prefetched across all workers. (default: ``2``)
+    collate_fn (Callable, optional): merges a list of samples to form a
+        mini-batch of Tensor(s).  Used when using batched loading from a
+        map-style dataset.
 
   """
 
@@ -62,20 +68,27 @@ class DataLoader(object):
     self.prefetch_factor = prefetch_factor
     self._collate_fn = default_collate_fn if collate_fn is None else collate_fn
 
+    self._num_data = len(dataset)
+    self._all_indices = np.arange(self._num_data)
+    if self.shuffle:
+      self._all_indices = np.random.permutation(self._all_indices)
     self._index = 0
     self._index_prefetch = 0
     self._index_queues = []
     self._data_workers = []
     self._cache = {}
+    self._event = multiprocessing.Event()
     if num_workers > 0:
       self._output_queue = multiprocessing.Queue()
       self._worker_cycle = cycle(range(num_workers))
-
       for _ in range(num_workers):
         index_queue = multiprocessing.Queue()
+        if hasattr(dataset, 'rng'):
+          if isinstance(getattr(dataset, 'rng'), (np.random.RandomState, bm.random.RandomState)):
+            dataset.rng.seed(dataset.rng.randint(100000))
         worker = multiprocessing.Process(
           target=self._worker_fn,
-          args=(dataset, index_queue, self._output_queue)
+          args=(dataset, index_queue, self._output_queue, self._event)
         )
         worker.daemon = True
         worker.start()
@@ -84,40 +97,58 @@ class DataLoader(object):
 
     self._prefetch()
 
-  def __next__(self):
-    batch = self.get_batch()
-    if batch is None:
-      raise StopIteration
-    else:
-      return batch
+  def suspend_subprocess(self):
+    """Suspend all sub-processes to wait for data loading jobs."""
+    if self._event.is_set():
+      self._event.clear()
+
+  def resume_subprocess(self):
+    """Resume all sub-processes for data loading."""
+    if not self._event.is_set():
+      self._event.set()
 
   def get_batch(self):
-    if self._index >= len(self.dataset):
+    if self._index >= self._num_data:
       return None
-    batch_size = len(self.dataset) - self._index
+    batch_size = self._num_data - self._index
     if self.drop_last and batch_size < self.batch_size:
       return None
     batch_size = min(batch_size, self.batch_size)
     return self._collate_fn(self, [self._get() for _ in range(batch_size)])
 
   def __iter__(self):
+    if self.shuffle:
+      self._all_indices = np.random.permutation(self._all_indices)
     self._index = 0
-    self._cache = {}
     self._index_prefetch = 0
+    self._cache = {}
+    self.resume_subprocess()
     self._prefetch()
-    return self
+    while True:
+      try:
+        batch = self.get_batch()
+      except Exception as e:
+        self.suspend_subprocess()
+        raise e
+      if batch is None:
+        break
+      else:
+        yield batch
+    self.suspend_subprocess()
 
   def __del__(self):
     try:
       for i, w in enumerate(self._data_workers):
         self._index_queues[i].put(None)
         w.join(timeout=5.0)
-      for q in self._index_queues:
-        q.cancel_join_thread()
-        q.close()
       if self.num_workers > 0:
         self._output_queue.cancel_join_thread()
         self._output_queue.close()
+      for q in self._index_queues:
+        q.cancel_join_thread()
+        q.close()
+    except:
+      pass
     finally:
       for w in self._data_workers:
         if w.is_alive():
@@ -132,7 +163,7 @@ class DataLoader(object):
       else:
         while True:
           try:
-            (index, thread_data) = self._output_queue.get(timeout=0)
+            (index, data_index, thread_data) = self._output_queue.get(timeout=0)
           except queue.Empty:  # output queue empty, keep trying
             continue
           if index == self._index:  # found our item, ready to return
@@ -141,31 +172,41 @@ class DataLoader(object):
           else:  # item isn't the one we want, cache for later
             self._cache[index] = thread_data
     else:
-      data = self.dataset[self._index]
+      data = self._get_one_data(self.dataset, self._all_indices[self._index])
     self._index += 1
     return data
 
   def _prefetch(self):
-    while ((self.num_workers > 0) and (self._index_prefetch < len(self.dataset)) and
+    while ((self.num_workers > 0) and
+           (self._index_prefetch < self._num_data) and
            (self._index_prefetch < self._index + 2 * self.num_workers * self.batch_size)):
       # if the prefetch_index hasn't reached the end of the dataset
       # and it is not 2 batches ahead, add indexes to the index queues
-      self._index_queues[next(self._worker_cycle)].put(self._index_prefetch)
+      true_index = self._all_indices[self._index_prefetch]
+      index = self._index_prefetch
+      self._index_queues[next(self._worker_cycle)].put((index, true_index))
       self._index_prefetch += 1
 
-  @staticmethod
-  def _worker_fn(dataset, index_queue, output_queue):
+  @classmethod
+  def _get_one_data(cls, dataset, index):
+    return dataset[index]
+
+  @classmethod
+  def _worker_fn(cls, dataset, index_queue, output_queue, event):
     while True:
+      event.wait()
       # Worker function, simply reads indices from index_queue, and adds the
       # dataset element to the output_queue
       try:
         index = index_queue.get(timeout=0)
       except queue.Empty:
+        # time.sleep(1.)
         continue
       if index is None:
         break
-      data = dataset[index]
-      output_queue.put((index, data))
+      index, data_index = index
+      data = cls._get_one_data(dataset, data_index)
+      output_queue.put((index, data_index, data))
 
 
 def default_collate_fn(cls, batch):
@@ -184,3 +225,5 @@ def default_collate_fn(cls, batch):
     return data
   elif isinstance(batch[0], (list, tuple)):
     return tuple(default_collate_fn(cls, var) for var in zip(*batch))
+  else:
+    raise TypeError

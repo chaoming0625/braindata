@@ -1,12 +1,7 @@
-from typing import Sequence, Union, Optional, Tuple, Any
-
-import numpy as np
+from typing import Sequence, Union, Tuple, Any
 
 import brainpy as bp
-
-__all__ = [
-  'interval_of',
-]
+import numpy as np
 
 
 def _slice(target):
@@ -48,4 +43,9 @@ def interval_of(elem: str, total: Union[dict[str, int], Sequence[Tuple[str, int]
       s += v
   else:
     raise ValueError('Not found')
+
+
+def period_to_arr(periods: dict):
+  res = [np.ones(length, dtype=int) * i for i, length in enumerate(periods.values())]
+  return np.concatenate(res)
 
