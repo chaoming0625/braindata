@@ -3,13 +3,17 @@ from typing import Union, Optional, Callable
 import numpy as np
 
 import brainpy as bp
-from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration, is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of
+from brainpy_datasets._src.cognitive.base import (CognitiveTask,
+                                                  TimeDuration,
+                                                  Feature,
+                                                  is_time_duration)
+from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.others import initialize
 
 __all__ = [
   'AntiReach',
   'Reaching1D',
+  'EvidenceAccumulation',
 ]
 
 
@@ -74,9 +78,9 @@ class AntiReach(CognitiveTask):
     n_delay = int(initialize(self.t_delay) / self.dt)
     n_decision = int(initialize(self.t_decision) / self.dt)
     _time_periods = {'fixation': n_fixation,
-                          'stimulus': n_stimulus,
-                          'delay': n_delay,
-                          'decision': n_decision, }
+                     'stimulus': n_stimulus,
+                     'delay': n_delay,
+                     'decision': n_decision, }
     n_total = sum(_time_periods.values())
     X = np.zeros((n_total, self.num_choice + 1))
     Y = np.zeros(n_total, dtype=int)
@@ -107,20 +111,17 @@ class AntiReach(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(_time_periods.items())
-    dim1 = [('fixation', 1), ('stimulus', self.num_choice)]
-
-    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
+    return X, Y, period_to_arr(_time_periods)
 
 
 class Reaching1D(CognitiveTask):
   r"""Reaching to the stimulus.
 
-    The agent is shown a stimulus during the fixation period. The stimulus
-    encodes a one-dimensional variable such as a movement direction. At the
-    end of the fixation period, the agent needs to respond by reaching
-    towards the stimulus direction.
-    """
+  The agent is shown a stimulus during the fixation period. The stimulus
+  encodes a one-dimensional variable such as a movement direction. At the
+  end of the fixation period, the agent needs to respond by reaching
+  towards the stimulus direction.
+  """
   metadata = {
     'paper_link': 'https://science.sciencemag.org/content/233/4771/1416',
     'paper_name': 'Neuronal population coding of movement direction',
@@ -145,8 +146,7 @@ class Reaching1D(CognitiveTask):
 
     # time
     self.t_fixation = is_time_duration(t_fixation)
-    self.t_reach =is_time_duration(t_reach)
-
+    self.t_reach = is_time_duration(t_reach)
 
     # features
     self.num_choice = bp.check.is_integer(num_choice)
@@ -182,8 +182,116 @@ class Reaching1D(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    dim0 = tuple(_time_periods.items())
-    dim1 = [('target', self.num_choice), ('self', self.num_choice)]
+    return X, Y, period_to_arr(_time_periods)
 
-    return [X, dict(ax0=dim0, ax1=dim1)], [Y, dict(ax0=dim0)]
+
+class EvidenceAccumulation(CognitiveTask):
+  metadata = {
+    'paper_link': '',
+    'paper_name': '',
+  }
+
+  def __init__(
+      self,
+      # time
+      dt: Union[int, float] = 1.,
+      t_interval: TimeDuration = 50.,
+      t_cue: TimeDuration = 100.,
+      t_delay: TimeDuration = 1000.,
+      t_recall: TimeDuration = 150.,
+      # features
+      ft_left: Feature = Feature(1, 25, 40.),
+      ft_right: Feature = Feature(1, 25, 40.),
+      ft_recall: Feature = Feature(1, 25, 40.),
+      ft_noise: Feature = Feature(1, 25, 10.),
+      prob: float = 0.3,
+      num_trial: int = 1024,
+      num_cue: int = 7,
+      seed: Optional[int] = None,
+      mode: str = 'spiking',
+      input_transform: Optional[Callable] = None,
+      target_transform: Optional[Callable] = None,
+  ):
+    super().__init__(input_transform=input_transform,
+                     target_transform=target_transform,
+                     dt=dt,
+                     num_trial=num_trial,
+                     seed=seed)
+
+    # time
+    self.t_interval = is_time_duration(t_interval)
+    self.t_cue = is_time_duration(t_cue)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_recall = is_time_duration(t_recall)
+
+    # feature
+    ft_left.name = 'left'
+    ft_right.name = 'right'
+    ft_noise.name = 'noise'
+    ft_recall.name = 'recall'
+    self.features = ft_left + ft_right + ft_recall + ft_noise
+    self.features.set_mode(mode)
+
+    # features
+    self.prob = bp.check.is_float(prob)
+    self.num_cue = bp.check.is_integer(num_cue)
+
+    # input / output information
+    periods = []
+    for i in range(self.num_cue):
+      periods.append(f'interval {i}')
+      periods.append(f'cue {i}')
+    periods += ['delay', 'recall']
+    self.periods = periods
+    self.output_features = ['left', 'right']
+
+  def sample_a_trial(self, item):
+    t_interval = int(initialize(self.t_interval) / self.dt)
+    t_cue = int(initialize(self.t_cue) / self.dt)
+    t_delay = int(initialize(self.t_delay) / self.dt)
+    t_recall = int(initialize(self.t_recall) / self.dt)
+    _time_periods = dict()
+    for i in range(self.num_cue):
+      _time_periods[f'interval {i}'] = t_interval
+      _time_periods[f'cue {i}'] = t_cue
+    _time_periods['delay'] = t_delay
+    _time_periods['recall'] = t_recall
+    t_total = sum(_time_periods.values())
+    X = np.zeros((t_total, self.features.num))
+
+    # assign input spike probability
+    ground_truth = self.rng.rand() < 0.5
+    prob = self.prob if ground_truth else (1 - self.prob)
+
+    # for each example in batch, draw which cues are going to be active (left or right)
+    cue_assignments = np.asarray(self.rng.random(self.num_cue) > prob, dtype=np.int_)
+
+    # generate input spikes
+    for k in range(self.num_cue):
+      # input channels only fire when they are selected (left or right)
+      choice = 'left' if cue_assignments[k] else 'right'
+      # reverse order of cues
+      i_seq = t_interval + k * (t_interval + t_cue)
+      X[i_seq:i_seq + t_cue, self.features[choice].i] = self.features[choice].fr(self.dt)
+
+    # recall cue
+    X[-t_recall:, self.features['recall'].i] = self.features['recall'].fr(self.dt)
+
+    # background noise
+    X[:, self.features['noise'].i] = self.features['noise'].fr(self.dt)
+
+    # generate inputs and targets
+    if self.features.mode == 'spiking':
+      X = self.rng.rand(*X.shape) < X
+    Y = np.asarray(np.sum(cue_assignments) > (self.num_cue / 2), dtype=int)
+
+    # transform
+    if self.input_transform is not None:
+      X = self.input_transform(X)
+
+    if self.target_transform is not None:
+      Y = self.target_transform(Y)
+
+    dim0 = period_to_arr(_time_periods)
+    return X, Y, dim0
 

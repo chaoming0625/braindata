@@ -38,6 +38,7 @@ class VisionDataset(Dataset):
       input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
   ) -> None:
+    super().__init__()
     if isinstance(root, (str, bytes)):
       root = os.path.expanduser(root)
     self.root = root

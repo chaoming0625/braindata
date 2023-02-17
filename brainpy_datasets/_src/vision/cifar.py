@@ -61,7 +61,6 @@ class CIFAR10(VisionDataset):
       target_transform: Optional[Callable] = None,
       download: bool = False,
   ) -> None:
-
     super().__init__(root, input_transform=input_transform, target_transform=target_transform)
 
     assert split in ['train', 'test']
