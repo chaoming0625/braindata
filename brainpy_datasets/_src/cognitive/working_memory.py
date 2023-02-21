@@ -7,31 +7,22 @@ from brainpy_datasets._src.cognitive.base import (CognitiveTask,
                                                   TimeDuration,
                                                   Feature,
                                                   is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
+from brainpy_datasets._src.cognitive._utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.others import initialize
 from brainpy_datasets._src.utils.random import TruncExp
 
-__all__ = [
-  'DelayComparison',
-  'DelayMatchCategory',
-  'DelayMatchSample',
-  'DelayPairedAssociation',
-  'DualDelayMatchSample',
-  'GoNoGo',
-  'IntervalDiscrimination',
-  'PostDecisionWager',
-  'ReadySetGo',
-]
 
-
-class DelayComparison(CognitiveTask):
+class RateDelayComparison(CognitiveTask):
   """Delayed comparison.
+
+  Adapted from `neurogym <https://github.com/neurogym/neurogym>`_.
 
   The agent needs to compare the magnitude of two stimuli are separated by a
   delay period. The agent reports its decision of the stronger stimulus
   during the decision period.
-  """
 
+
+  """
   metadata = {
     'paper_link': 'https://www.jneurosci.org/content/30/28/9424',
     'paper_name': 'Neuronal Population Coding of Parametric Working Memory',
@@ -46,11 +37,8 @@ class DelayComparison(CognitiveTask):
       t_stimulus2: TimeDuration = 500.,
       t_delay: TimeDuration = 1000.,
       t_decision: TimeDuration = 100.,
-      ft_fixation: Feature = Feature(1, 20, 100.),
-      ft_choice: Feature = Feature(1, 20, 100.),
-      ft_noise: Feature = Feature(1, 20, 50.),
       num_trial: int = 1024,
-      mode: str = 'rate',
+      noise_sigma: float = 1.0,
       seed: Optional[int] = None,
       input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
@@ -65,8 +53,10 @@ class DelayComparison(CognitiveTask):
     if vpairs is None:
       self.vpairs = np.asarray([(18, 10), (22, 14), (26, 18), (30, 22), (34, 26)])
     else:
-      self.vpairs = np.asarray(vpairs)
-    self.vpairs = (self.vpairs - self.vpairs.min()) / self.vpairs.max()
+      self.vpairs = vpairs
+    self._vmin = np.min(self.vpairs)
+    self._vmax = np.max(self.vpairs)
+    self.noise_sigma = bp.check.is_float(noise_sigma, min_bound=0., allow_int=True)
 
     # time
     self.t_fixation = is_time_duration(t_fixation)
@@ -76,16 +66,20 @@ class DelayComparison(CognitiveTask):
     self.t_decision = is_time_duration(t_decision)
 
     # features
-    self.features = (ft_fixation.set_name('fixation') +
-                     ft_choice.set_name('choice') +
-                     ft_noise.set_name('noise'))
-    self.features.set_mode(mode)
-
-    # features
     self._choices = np.asarray([1, 2])
+    self._feature_periods = {'fixation': 1, 'choice': 1}
 
     # input / output information
     self.output_features = ['fixation', 'choice 0', 'choice 1']
+    self.input_features = ['fixation', 'stimulus']
+
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
@@ -93,13 +87,13 @@ class DelayComparison(CognitiveTask):
     n_stimulus2 = int(initialize(self.t_stimulus2) / self.dt)
     n_delay = int(initialize(self.t_delay) / self.dt)
     n_decision = int(initialize(self.t_decision) / self.dt)
-    _periods = {'fixation': n_fixation,
-                'stimulus1': n_stimulus1,
-                'delay': n_delay,
-                'stimulus2': n_stimulus2,
-                'decision': n_decision, }
-    n_total = sum(_periods.values())
-    X = np.zeros((n_total, self.features.num))
+    _time_periods = {'fixation': n_fixation,
+                     'stimulus1': n_stimulus1,
+                     'delay': n_delay,
+                     'stimulus2': n_stimulus2,
+                     'decision': n_decision, }
+    n_total = sum(_time_periods.values())
+    X = np.zeros((n_total, 2))
     Y = np.zeros(n_total, dtype=int)
 
     ground_truth = self.rng.choice(self._choices)
@@ -107,17 +101,15 @@ class DelayComparison(CognitiveTask):
     if ground_truth == 2:
       v1, v2 = v2, v1
 
-    ax0_stim1 = interval_of('stimulus1', _periods)
-    ax0_stim2 = interval_of('stimulus2', _periods)
-    ax0_decision = interval_of('decision', _periods)
-    X[:, self.features['fixation'].i] += self.features['fixation'].fr(self.dt)
-    X[:, self.features['noise'].i] += self.features['noise'].fr(self.dt)
-    s1 = v1 + 0.5
-    X[ax0_stim1, self.features['choice'].i] += s1 * self.features['choice'].fr(self.dt)
-    s2 = v2 + 0.5
-    X[ax0_stim2, self.features['choice'].i] += s2 * self.features['choice'].fr(self.dt)
-    if self.features.mode == 'spiking':
-      X = self.rng.random(X.shape) < X
+    ax0_stim1 = interval_of('stimulus1', _time_periods)
+    ax0_stim2 = interval_of('stimulus2', _time_periods)
+    ax0_decision = interval_of('decision', _time_periods)
+
+    X[:, 0] += 1.
+    X[ax0_stim1, 1] += (1 + (v1 - self._vmin) / (self._vmax - self._vmin)) / 2
+    X[ax0_stim1, 1] += self.rng.randn(_time_periods['stimulus1']) * self.noise_sigma / np.sqrt(self.dt)
+    X[ax0_stim2, 1] += (1 + (v2 - self._vmin) / (self._vmax - self._vmin)) / 2
+    X[ax0_stim2, 1] += self.rng.randn(_time_periods['stimulus2']) * self.noise_sigma / np.sqrt(self.dt)
 
     Y[ax0_decision] = ground_truth
 
@@ -126,10 +118,10 @@ class DelayComparison(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y, period_to_arr(_periods)
+    return X, Y, period_to_arr(_time_periods)
 
 
-class DelayMatchCategory(CognitiveTask):
+class RateDelayMatchCategory(CognitiveTask):
   r"""Delayed match-to-category task.
 
   A sample stimulus is shown during the sample period. The stimulus is
@@ -183,6 +175,14 @@ class DelayMatchCategory(CognitiveTask):
     self.output_features = ['fixation', 'match', 'non-match']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
+  @property
+  def num_inputs(self) -> int:
+    return 1 + self.num_choice
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
     n_sample = int(initialize(self.t_sample) / self.dt)
@@ -228,7 +228,7 @@ class DelayMatchCategory(CognitiveTask):
     return X, Y, ax0
 
 
-class DelayMatchSample(CognitiveTask):
+class RateDelayMatchSample(CognitiveTask):
   r"""Delayed match-to-sample task.
 
   A sample stimulus is shown during the sample period. The stimulus is
@@ -284,6 +284,14 @@ class DelayMatchSample(CognitiveTask):
     self.output_features = ['fixation', 'match', 'non-match']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
+  @property
+  def num_inputs(self) -> int:
+    return 1 + self.num_choice
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
     n_sample = int(initialize(self.t_sample) / self.dt)
@@ -331,7 +339,7 @@ class DelayMatchSample(CognitiveTask):
     return X, Y, period_to_arr(_time_periods)
 
 
-class DelayPairedAssociation(CognitiveTask):
+class RateDelayPairedAssociation(CognitiveTask):
   r"""Delayed paired-association task.
 
   The agent is shown a pair of two stimuli separated by a delay period. For
@@ -381,6 +389,14 @@ class DelayPairedAssociation(CognitiveTask):
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(4)]
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
     n_stim1 = int(initialize(self.t_stim1) / self.dt)
@@ -400,7 +416,6 @@ class DelayPairedAssociation(CognitiveTask):
 
     pair = self.pairs[self.rng.choice(len(self.pairs))]
     ground_truth = int(np.diff(pair)[0] % 2 == self.association)
-
     ax0_stim1 = interval_of('stim1', _time_periods)
     ax0_stim2 = interval_of('stim2', _time_periods)
     ax0_decision = interval_of('decision', _time_periods)
@@ -424,7 +439,7 @@ class DelayPairedAssociation(CognitiveTask):
     return X, Y, period_to_arr(_time_periods)
 
 
-class DualDelayMatchSample(CognitiveTask):
+class RateDualDelayMatchSample(CognitiveTask):
   r"""Two-item Delay-match-to-sample.
 
   The trial starts with a fixation period. Then during the sample period,
@@ -484,6 +499,14 @@ class DualDelayMatchSample(CognitiveTask):
                            'stimulus1-0', 'stimulus1-1',
                            'stimulus2-0', 'stimulus2-1',
                            'cue1', 'cue2']
+
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
@@ -566,7 +589,7 @@ class DualDelayMatchSample(CognitiveTask):
     return X, Y, period_to_arr(_time_periods)
 
 
-class GoNoGo(CognitiveTask):
+class RateGoNoGo(CognitiveTask):
   r"""Delayed match-to-sample task.
 
   A sample stimulus is shown during the sample period. The stimulus is
@@ -589,7 +612,6 @@ class GoNoGo(CognitiveTask):
       t_delay: TimeDuration = 500.,
       t_decision: TimeDuration = 900.,
       num_trial: int = 1024,
-      num_choice: int = 2,
       seed: Optional[int] = None,
       input_transform: Optional[Callable] = None,
       target_transform: Optional[Callable] = None,
@@ -600,21 +622,23 @@ class GoNoGo(CognitiveTask):
                      num_trial=num_trial,
                      seed=seed)
 
-    # Inputs
-
     # time
     self.t_fixation = is_time_duration(t_fixation)
     self.t_stimulus = is_time_duration(t_stimulus)
     self.t_delay = is_time_duration(t_delay)
     self.t_decision = is_time_duration(t_decision)
 
-    # features
-    self.num_choice = bp.check.is_integer(num_choice)
-    self._choices = np.asarray([0, 1])
-
     # input / output information
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation', 'nogo', 'go']
+
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
@@ -629,15 +653,12 @@ class GoNoGo(CognitiveTask):
     X = np.zeros((n_total, len(self.input_features)))
     Y = np.zeros(n_total, dtype=int)
 
-    ground_truth = self.rng.choice(self._choices)
-
+    ground_truth = self.rng.choice([0, 1])
     ax0_decision = interval_of('decision', _time_periods)
     ax0_stim = interval_of('stimulus', _time_periods)
-
     X[:, 0] += 1.
     X[ax0_stim, ground_truth + 1] += 1.
     X[ax0_decision] = 0.
-
     Y[ax0_decision] = ground_truth
 
     if self.input_transform is not None:
@@ -649,7 +670,7 @@ class GoNoGo(CognitiveTask):
     return X, Y, period_to_arr(_time_periods)
 
 
-class IntervalDiscrimination(CognitiveTask):
+class RateIntervalDiscrimination(CognitiveTask):
   r"""Comparing the time length of two stimuli.
 
   Two stimuli are shown sequentially, separated by a delay period. The
@@ -708,6 +729,14 @@ class IntervalDiscrimination(CognitiveTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_stim1 = int(initialize(self.t_stim1) / self.dt)
@@ -750,7 +779,7 @@ class IntervalDiscrimination(CognitiveTask):
     return X, Y, period_to_arr(time_info)
 
 
-class PostDecisionWager(CognitiveTask):
+class RatePostDecisionWager(CognitiveTask):
   r"""Post-decision wagering task assessing confidence.
 
   The agent first performs a perceptual discrimination task (see for more
@@ -811,6 +840,14 @@ class PostDecisionWager(CognitiveTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1', 'sure']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1', 'sure']
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_stimulus = int(initialize(self.t_stimulus) / self.dt)
@@ -870,7 +907,7 @@ class PostDecisionWager(CognitiveTask):
     return X, Y, period_to_arr(time_info)
 
 
-class ReadySetGo(CognitiveTask):
+class RateReadySetGo(CognitiveTask):
   r"""Agents have to measure and produce different time intervals.
 
   A stimulus is briefly shown during a ready period, then again during a
@@ -930,6 +967,14 @@ class ReadySetGo(CognitiveTask):
     self.output_features = ['fixation', 'go']
     self.input_features = ['fixation', 'ready', 'set']
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_measure = int(initialize(self.t_measure) / self.dt)
@@ -969,3 +1014,148 @@ class ReadySetGo(CognitiveTask):
       Y = self.target_transform(Y)
 
     return X, Y, period_to_arr(time_info)
+
+
+class DelayComparison(CognitiveTask):
+  """Delayed comparison.
+
+  The agent needs to compare the magnitude of two stimuli are separated by a
+  delay period. The agent reports its decision of the stronger stimulus
+  during the decision period.
+  """
+
+  metadata = {
+    'paper_link': 'https://www.jneurosci.org/content/30/28/9424',
+    'paper_name': 'Neuronal Population Coding of Parametric Working Memory',
+  }
+
+  def __init__(
+      self,
+      dt: Union[int, float] = 100.,
+      vpairs: Optional[np.ndarray] = None,
+      t_fixation: TimeDuration = 500.,
+      t_stimulus1: TimeDuration = 500.,
+      t_stimulus2: TimeDuration = 500.,
+      t_delay: TimeDuration = 1000.,
+      t_decision: TimeDuration = 100.,
+      ft_fixation: Feature = Feature(1, 20, 100.),
+      ft_choice: Feature = Feature(1, 20, 100.),
+      ft_noise: Feature = Feature(1, 20, 50.),
+      num_trial: int = 1024,
+      normalize: bool = True,
+      mode: str = 'rate',
+      seed: Optional[int] = None,
+      input_transform: Optional[Callable] = None,
+      target_transform: Optional[Callable] = None,
+  ):
+    super().__init__(input_transform=input_transform,
+                     target_transform=target_transform,
+                     dt=dt,
+                     num_trial=num_trial,
+                     seed=seed)
+
+    # Inputs
+    if vpairs is None:
+      self.vpairs = np.linspace(0.5, 1.0, 10)
+    else:
+      self.vpairs = np.asarray(vpairs)
+    if normalize:
+      r = (self.vpairs - self.vpairs.min()) / (self.vpairs.max() - self.vpairs.min())
+      self.vpairs = r / 2 + 0.5
+
+    # time
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_stimulus1 = is_time_duration(t_stimulus1)
+    self.t_stimulus2 = is_time_duration(t_stimulus2)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_decision = is_time_duration(t_decision)
+
+    # features
+    self.features = (ft_fixation.set_name('fixation') +
+                     ft_choice.set_name('choice') +
+                     ft_noise.set_name('noise'))
+    self.features.set_mode(mode)
+
+    # input / output information
+    self.output_features = ['fixation', 'bigger', 'smaller']
+
+  @property
+  def num_inputs(self) -> int:
+    return self.features.num
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
+  def sample_a_trial(self, item):
+    n_fixation = int(initialize(self.t_fixation) / self.dt)
+    n_stimulus1 = int(initialize(self.t_stimulus1) / self.dt)
+    n_stimulus2 = int(initialize(self.t_stimulus2) / self.dt)
+    n_delay = int(initialize(self.t_delay) / self.dt)
+    n_decision = int(initialize(self.t_decision) / self.dt)
+    _periods = {'fixation': n_fixation,
+                'stimulus1': n_stimulus1,
+                'delay': n_delay,
+                'stimulus2': n_stimulus2,
+                'decision': n_decision, }
+    n_total = sum(_periods.values())
+    X = np.zeros((n_total, self.features.num))
+    Y = np.zeros(n_total, dtype=int)
+
+    v1, v2 = self.rng.choice(self.vpairs, 2)
+    ground_truth = 1 if (v1 > v2) else 2
+
+    ax0_stim1 = interval_of('stimulus1', _periods)
+    ax0_stim2 = interval_of('stimulus2', _periods)
+    ax0_decision = interval_of('decision', _periods)
+    X[:, self.features['fixation'].i] += self.features['fixation'].fr(self.dt)
+    X[:, self.features['noise'].i] += self.features['noise'].fr(self.dt)
+    X[ax0_stim1, self.features['choice'].i] += v1 * self.features['choice'].fr(self.dt)
+    X[ax0_stim2, self.features['choice'].i] += v2 * self.features['choice'].fr(self.dt)
+    if self.features.mode == 'spiking':
+      X = self.rng.random(X.shape) < X
+
+    Y[ax0_decision] = ground_truth
+
+    if self.input_transform is not None:
+      X = self.input_transform(X)
+
+    if self.target_transform is not None:
+      Y = self.target_transform(Y)
+
+    return X, Y, period_to_arr(_periods)
+
+
+class DMS(CognitiveTask):
+  def __init__(
+      self,
+      dt: Union[int, float] = 100.,
+      t_fixation: TimeDuration = 500.,
+      t_sample: TimeDuration = 500.,
+      t_delay: TimeDuration = 1000.,
+      t_test: TimeDuration = 100.,
+      ft_fixation: Feature = Feature(1, 20, 100.),
+      ft_choice: Feature = Feature(1, 20, 100.),
+      ft_noise: Feature = Feature(1, 20, 50.),
+      num_trial: int = 1024,
+      mode: str = 'rate',
+      seed: Optional[int] = None,
+      input_transform: Optional[Callable] = None,
+      target_transform: Optional[Callable] = None,
+  ):
+    super().__init__(input_transform=input_transform,
+                     target_transform=target_transform,
+                     dt=dt,
+                     num_trial=num_trial,
+                     seed=seed)
+
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_sample = is_time_duration(t_sample)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_test = is_time_duration(t_test)
+
+    self.features = ft_fixation.set_name('fixation')
+
+
+
+

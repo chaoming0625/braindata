@@ -43,6 +43,14 @@ class _FeatureBase(object):
     self._mode = mode
 
   @property
+  def is_spiking_mode(self):
+    return self.mode == 'spiking'
+
+  @property
+  def is_rate_mode(self):
+    return self.mode == 'rate'
+
+  @property
   def num(self):
     if self.mode == 'rate':
       return self._r_num
@@ -241,7 +249,7 @@ class CognitiveTask(Dataset):
 
   .. note::
 
-      :attr:`transforms` and the combination of :attr:`transform` and
+      :attr:`transforms` and the combination of :attr:`input_transform` and
       :attr:`target_transform` are mutually exclusive.
 
   Parameters
@@ -255,10 +263,6 @@ class CognitiveTask(Dataset):
   """
 
   _repr_indent = 4
-
-  output_features: Sequence[str]
-  input_features: Sequence[str]
-  periods: Sequence[str]
 
   def __init__(
       self,
@@ -274,6 +278,14 @@ class CognitiveTask(Dataset):
     self.transforms = TransformIT(input_transform, target_transform)
     self.dt = bp.check.is_float(dt, allow_int=True)
     self.num_trial = bp.check.is_integer(num_trial, )
+
+  @property
+  def num_inputs(self) -> int:
+    raise NotImplementedError
+
+  @property
+  def num_outputs(self) -> int:
+    raise NotImplementedError
 
   def __getitem__(self, index: int) -> Tuple[Data, ...]:
     """Get one data.

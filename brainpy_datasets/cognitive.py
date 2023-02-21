@@ -5,32 +5,33 @@ from brainpy_datasets._src.cognitive.base import (
 )
 
 from brainpy_datasets._src.cognitive.decision_making import (
-  SingleContextDecisionMaking as SingleContextDecisionMaking,
-  ContextDecisionMaking as ContextDecisionMaking,
-  PerceptualDecisionMaking as PerceptualDecisionMaking,
-  PulseDecisionMaking as PulseDecisionMaking,
-  PerceptualDecisionMakingDelayResponse as PerceptualDecisionMakingDelayResponse,
+  RateSingleContextDecisionMaking,
+  RateContextDecisionMaking,
+  RatePerceptualDecisionMaking,
+  RatePulseDecisionMaking,
+  RatePerceptualDecisionMakingDelayResponse,
 )
 
 from brainpy_datasets._src.cognitive.others import (
-  AntiReach as AntiReach,
-  Reaching1D as Reaching1D,
-  EvidenceAccumulation as EvidenceAccumulation,
+  RateAntiReach,
+  RateReaching1D,
+  EvidenceAccumulation,
 )
 
 from brainpy_datasets._src.cognitive.reasoning import (
-  HierarchicalReasoning as HierarchicalReasoning,
-  ProbabilisticReasoning as ProbabilisticReasoning,
+  RateHierarchicalReasoning,
+  RateProbabilisticReasoning,
 )
 
 from brainpy_datasets._src.cognitive.working_memory import (
-  DelayComparison as DelayComparison,
-  DelayMatchCategory as DelayMatchCategory,
-  DelayMatchSample as DelayMatchSample,
-  DelayPairedAssociation as DelayPairedAssociation,
-  DualDelayMatchSample as DualDelayMatchSample,
-  GoNoGo as GoNoGo,
-  IntervalDiscrimination as IntervalDiscrimination,
-  PostDecisionWager as PostDecisionWager,
-  ReadySetGo as ReadySetGo,
+  RateDelayComparison,
+  RateDelayMatchCategory,
+  RateDelayMatchSample,
+  RateDelayPairedAssociation,
+  RateDualDelayMatchSample,
+  RateGoNoGo,
+  RateIntervalDiscrimination,
+  RatePostDecisionWager,
+  RateReadySetGo,
+  DelayComparison,
 )

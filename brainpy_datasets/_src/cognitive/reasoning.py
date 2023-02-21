@@ -4,17 +4,17 @@ import brainpy as bp
 import numpy as np
 
 from brainpy_datasets._src.cognitive.base import (CognitiveTask, TimeDuration)
-from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
+from brainpy_datasets._src.cognitive._utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.others import initialize
 from brainpy_datasets._src.utils.random import TruncExp
 
 __all__ = [
-  'HierarchicalReasoning',
-  'ProbabilisticReasoning',
+  'RateHierarchicalReasoning',
+  'RateProbabilisticReasoning',
 ]
 
 
-class HierarchicalReasoning(CognitiveTask):
+class RateHierarchicalReasoning(CognitiveTask):
   """Hierarchical reasoning of rules.
 
   On each trial, the subject receives two flashes separated by a delay
@@ -82,6 +82,14 @@ class HierarchicalReasoning(CognitiveTask):
     self.input_features = ['fixation', 'rule 0', 'rule 1', 'stimulus 0', 'stimulus 1']
     self._feature_info = {'fixation': 1, 'rule': 2, 'choice': 2}
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)
     t_rule_target = int(initialize(self.t_rule_target) / self.dt)
@@ -139,7 +147,7 @@ class HierarchicalReasoning(CognitiveTask):
     return X, Y, period_to_arr(time_info)
 
 
-class ProbabilisticReasoning(CognitiveTask):
+class RateProbabilisticReasoning(CognitiveTask):
   """Probabilistic reasoning.
 
   The agent is shown a sequence of stimuli. Each stimulus is associated
@@ -208,6 +216,14 @@ class ProbabilisticReasoning(CognitiveTask):
     self._feature_info = {'fixation': 1}
     for i in range(num_loc):
       self._feature_info[f'loc{i}'] = dim_shape
+
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, index):
     t_fixation = int(initialize(self.t_fixation) / self.dt)

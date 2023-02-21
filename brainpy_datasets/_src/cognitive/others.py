@@ -7,17 +7,17 @@ from brainpy_datasets._src.cognitive.base import (CognitiveTask,
                                                   TimeDuration,
                                                   Feature,
                                                   is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
+from brainpy_datasets._src.cognitive._utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.others import initialize
 
 __all__ = [
-  'AntiReach',
-  'Reaching1D',
+  'RateAntiReach',
+  'RateReaching1D',
   'EvidenceAccumulation',
 ]
 
 
-class AntiReach(CognitiveTask):
+class RateAntiReach(CognitiveTask):
   """Anti-response task.
 
   During the fixation period, the agent fixates on a fixation point.
@@ -72,6 +72,14 @@ class AntiReach(CognitiveTask):
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
     self.input_features = ['fixation'] + [f'stimulus {i}' for i in range(num_choice)]
 
+  @property
+  def num_inputs(self) -> int:
+    return 1 + self.num_choice
+
+  @property
+  def num_outputs(self) -> int:
+    return 1 + self.num_choice
+
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
     n_stimulus = int(initialize(self.t_stimulus) / self.dt)
@@ -114,7 +122,7 @@ class AntiReach(CognitiveTask):
     return X, Y, period_to_arr(_time_periods)
 
 
-class Reaching1D(CognitiveTask):
+class RateReaching1D(CognitiveTask):
   r"""Reaching to the stimulus.
 
   The agent is shown a stimulus during the fixation period. The stimulus
@@ -157,6 +165,14 @@ class Reaching1D(CognitiveTask):
     self.output_features = ['fixation', 'left', 'right']
     self.input_features = [f'target{i}' for i in range(num_choice)] + [f'self{i}' for i in range(num_choice)]
 
+  @property
+  def num_inputs(self) -> int:
+    return 1 + self.num_choice
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     n_fixation = int(self.t_fixation / self.dt)
     n_reach = int(self.t_reach / self.dt)
@@ -187,8 +203,8 @@ class Reaching1D(CognitiveTask):
 
 class EvidenceAccumulation(CognitiveTask):
   metadata = {
-    'paper_link': '',
-    'paper_name': '',
+    'paper_link': 'https://doi.org/10.1038/nn.4403',
+    'paper_name': 'History-dependent variability in population dynamics during evidence accumulation in cortex',
   }
 
   def __init__(
@@ -245,6 +261,14 @@ class EvidenceAccumulation(CognitiveTask):
     self.periods = periods
     self.output_features = ['left', 'right']
 
+  @property
+  def num_inputs(self) -> int:
+    return self.features.num
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     t_interval = int(initialize(self.t_interval) / self.dt)
     t_cue = int(initialize(self.t_cue) / self.dt)
@@ -281,7 +305,7 @@ class EvidenceAccumulation(CognitiveTask):
     X[:, self.features['noise'].i] = self.features['noise'].fr(self.dt)
 
     # generate inputs and targets
-    if self.features.mode == 'spiking':
+    if self.features.is_spiking_mode:
       X = self.rng.rand(*X.shape) < X
     Y = np.asarray(np.sum(cue_assignments) > (self.num_cue / 2), dtype=int)
 
