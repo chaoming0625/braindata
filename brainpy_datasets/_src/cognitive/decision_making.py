@@ -7,20 +7,20 @@ from brainpy_datasets._src.cognitive.base import (CognitiveTask,
                                                   TimeDuration,
                                                   Feature,
                                                   is_time_duration)
-from brainpy_datasets._src.cognitive.utils import interval_of, period_to_arr
+from brainpy_datasets._src.cognitive._utils import interval_of, period_to_arr
 from brainpy_datasets._src.utils.random import TruncExp
 from brainpy_datasets._src.utils.others import initialize
 
 __all__ = [
-  'SingleContextDecisionMaking',
-  'ContextDecisionMaking',
-  'PerceptualDecisionMaking',
-  'PulseDecisionMaking',
-  'PerceptualDecisionMakingDelayResponse',
+  'RateSingleContextDecisionMaking',
+  'RateContextDecisionMaking',
+  'RatePerceptualDecisionMaking',
+  'RatePulseDecisionMaking',
+  'RatePerceptualDecisionMakingDelayResponse',
 ]
 
 
-class SingleContextDecisionMaking(CognitiveTask):
+class RateSingleContextDecisionMaking(CognitiveTask):
   """Context-dependent decision-making task.
 
   The agent simultaneously receives stimulus inputs from two modalities (
@@ -86,8 +86,12 @@ class SingleContextDecisionMaking(CognitiveTask):
     self._feature_info = {'fixation': 1, 'stimulus 0': num_choice, 'stimulus 1': num_choice}
 
   @property
-  def num_input_feature(self):
+  def num_inputs(self):
     return 1 + self.num_choice * 2
+
+  @property
+  def num_outputs(self) -> int:
+    return 1 + self.num_choice
 
   def sample_a_trial(self, item):
     t_delay = int(initialize(self.t_delay) / self.dt)
@@ -95,7 +99,7 @@ class SingleContextDecisionMaking(CognitiveTask):
     t_stimulus = int(initialize(self.t_stimulus) / self.dt)
     t_decision = int(initialize(self.t_decision) / self.dt)
     n_total = t_fixation + t_stimulus + t_delay + t_decision
-    X = np.zeros((n_total, self.num_input_feature))
+    X = np.zeros((n_total, self.num_inputs))
     Y = np.zeros((n_total,), dtype=int)
     _time_info = {'fixation': t_fixation,
                   'stimulus': t_stimulus,
@@ -116,7 +120,7 @@ class SingleContextDecisionMaking(CognitiveTask):
     X[t_fixation: t_fixation + t_stimulus, 1:self.num_choice + 1] += stim
     stim = np.cos(self._features - stim_theta_1) * (coh_1 / 200) + 0.5
     X[t_fixation: t_fixation + t_stimulus, self.num_choice + 1:] += stim
-    rand = self.rng.randn(t_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
+    rand = self.rng.randn(t_stimulus, self.num_inputs - 1) * self.noise_sigma / np.sqrt(self.dt)
     X[t_fixation: t_fixation + t_stimulus, 1:] += rand
     X[t_fixation + t_stimulus + t_delay:] = 0.
     Y[t_fixation + t_stimulus + t_delay:] = ground_truth + 1
@@ -130,7 +134,7 @@ class SingleContextDecisionMaking(CognitiveTask):
     return X, Y, period_to_arr(_time_info)
 
 
-class ContextDecisionMaking(CognitiveTask):
+class RateContextDecisionMaking(CognitiveTask):
   """Context-dependent decision-making task.
 
   The agent simultaneously receives stimulus inputs from two modalities (
@@ -181,8 +185,12 @@ class ContextDecisionMaking(CognitiveTask):
                            'context1', 'context2']
 
   @property
-  def num_input_feature(self):
+  def num_inputs(self):
     return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, item):
     _n_delay = int(initialize(self.t_delay) / self.dt)
@@ -190,7 +198,7 @@ class ContextDecisionMaking(CognitiveTask):
     _n_stimulus = int(initialize(self.t_stimulus) / self.dt)
     _n_decision = int(initialize(self.t_decision) / self.dt)
     n_total = _n_fixation + _n_stimulus + _n_delay + _n_decision
-    X = np.zeros((n_total, self.num_input_feature))
+    X = np.zeros((n_total, self.num_inputs))
     Y = np.zeros((n_total,), dtype=int)
 
     time_info = {'fixation': _n_fixation,
@@ -224,7 +232,7 @@ class ContextDecisionMaking(CognitiveTask):
     stim = (1 - signed_coh_1 / 100) / 2
     X[ax0_stimulus, interval_of('stim2_mod2', feature_info)] += stim
 
-    rand = self.rng.randn(_n_stimulus, self.num_input_feature - 1) * self.noise_sigma / np.sqrt(self.dt)
+    rand = self.rng.randn(_n_stimulus, self.num_inputs - 1) * self.noise_sigma / np.sqrt(self.dt)
     X[ax0_stimulus, 1:] += rand
 
     if context == 0:
@@ -243,7 +251,7 @@ class ContextDecisionMaking(CognitiveTask):
     return X, Y, period_to_arr(time_info)
 
 
-class PerceptualDecisionMaking(CognitiveTask):
+class RatePerceptualDecisionMaking(CognitiveTask):
   """"
   Two-alternative forced choice task in which the subject has to
   integrate two stimuli to decide which one is higher on average.
@@ -311,6 +319,14 @@ class PerceptualDecisionMaking(CognitiveTask):
     self.output_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
     self.input_features = ['fixation'] + [f'choice {i}' for i in range(num_choice)]
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     n_fixation = int(initialize(self.t_fixation) / self.dt)
     n_stimulus = int(initialize(self.t_stimulus) / self.dt)
@@ -347,14 +363,14 @@ class PerceptualDecisionMaking(CognitiveTask):
 
     if self.input_transform is not None:
       X = self.input_transform(X)
-      
+
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
     return X, Y, period_to_arr(_time_periods)
 
 
-class PulseDecisionMaking(CognitiveTask):
+class RatePulseDecisionMaking(CognitiveTask):
   """Pulse-based decision-making task.
 
   Discrete stimuli are presented briefly as pulses.
@@ -403,6 +419,14 @@ class PulseDecisionMaking(CognitiveTask):
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
 
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
+
   def sample_a_trial(self, item):
     _n_fixation = int(initialize(self.t_fixation) / self.dt)
     _n_cue = int(initialize(self.t_cue) / self.dt)
@@ -444,7 +468,7 @@ class PulseDecisionMaking(CognitiveTask):
     return X, Y, period_to_arr(_time_info)
 
 
-class PerceptualDecisionMakingDelayResponse(CognitiveTask):
+class RatePerceptualDecisionMakingDelayResponse(CognitiveTask):
   """Perceptual decision-making with delayed responses.
 
   Agents have to integrate two stimuli and report which one is
@@ -498,6 +522,14 @@ class PerceptualDecisionMakingDelayResponse(CognitiveTask):
     # input / output information
     self.output_features = ['fixation', 'choice 0', 'choice 1']
     self.input_features = ['fixation', 'stimulus 0', 'stimulus 1']
+
+  @property
+  def num_inputs(self) -> int:
+    return len(self.input_features)
+
+  @property
+  def num_outputs(self) -> int:
+    return len(self.output_features)
 
   def sample_a_trial(self, item):
     _n_fixation = int(initialize(self.t_fixation) / self.dt)
