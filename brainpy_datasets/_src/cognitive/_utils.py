@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Tuple, Any
+from typing import Sequence, Union, Tuple, Any, Dict
 
 import brainpy as bp
 import numpy as np
@@ -31,7 +31,7 @@ def set(target: np.ndarray,
   target[slices] = value
 
 
-def interval_of(elem: str, total: Union[dict[str, int], Sequence[Tuple[str, int]]]) -> slice:
+def interval_of(elem: str, total: Union[Dict[str, int], Sequence[Tuple[str, int]]]) -> slice:
   if isinstance(total, dict):
     total = tuple(total.items())
   bp.check.is_sequence(total, elem_type=tuple)
