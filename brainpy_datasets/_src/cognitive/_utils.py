@@ -49,3 +49,14 @@ def period_to_arr(periods: dict):
   res = [np.ones(length, dtype=int) * i for i, length in enumerate(periods.values())]
   return np.concatenate(res)
 
+
+def firing_rate(base, dt, mode):
+  if mode == 'rate':
+    return base * dt / 1e3
+  elif mode == 'spiking':
+    if base * dt > 1e3:
+      raise ValueError(f'dt is too big, so that dt * fr > 1e3.')
+    return base * dt / 1e3
+  else:
+    raise ValueError('Please set mode as "rate" or "spiking"')
+

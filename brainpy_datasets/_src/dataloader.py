@@ -1,14 +1,11 @@
 import multiprocessing
 import queue
-import time
 from itertools import cycle
-from typing import TypeVar, Callable, List
+from typing import TypeVar, Callable
 
-import psutil
-
+import brainpy.math as bm
 import jax
 import jax.numpy as jnp
-import brainpy.math as bm
 import numpy as np
 
 from .base import Dataset

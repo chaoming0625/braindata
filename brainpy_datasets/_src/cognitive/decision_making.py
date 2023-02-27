@@ -83,6 +83,7 @@ class RateSingleContextDecisionMaking(CognitiveTask):
         [f'stimulus 0-{i}' for i in range(num_choice)] +
         [f'stimulus 1-{i}' for i in range(num_choice)]
     )
+    self.times = ['fixation', 'stimulus', 'delay', 'decision']
     self._feature_info = {'fixation': 1, 'stimulus 0': num_choice, 'stimulus 1': num_choice}
 
   @property
@@ -131,7 +132,7 @@ class RateSingleContextDecisionMaking(CognitiveTask):
     if self.target_transform is not None:
       Y = self.target_transform(Y)
 
-    return X, Y, period_to_arr(_time_info)
+    return X, Y, {'times': period_to_arr(_time_info)}
 
 
 class RateContextDecisionMaking(CognitiveTask):
@@ -356,8 +357,9 @@ class RatePerceptualDecisionMaking(CognitiveTask):
     X[ax0_stimulus, ax1_fixation] += 1.
     X[ax0_delay, ax1_fixation] += 1.
     X[ax0_stimulus, ax1_choice] += np.cos(self._features - feature) * (coherence / 200) + 0.5
-    noise = self.rng.randn(_time_periods['stimulus'], self.num_choice) * self.noise_sigma / np.sqrt(self.dt)
-    X[ax0_stimulus, ax1_choice] += noise
+    # X[ax0_stimulus, ax1_choice] += noise
+    noise = self.rng.randn(*X.shape) * self.noise_sigma / np.sqrt(self.dt)
+    X += noise
 
     Y[ax0_decision] = ground_truth + 1
 
