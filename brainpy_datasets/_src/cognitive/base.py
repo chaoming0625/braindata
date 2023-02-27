@@ -1,4 +1,5 @@
 import functools
+import math
 from typing import Callable, Optional, Union, Sequence, Tuple, Dict
 
 import brainpy as bp
@@ -228,6 +229,22 @@ class Feature(_FeatureBase):
     return f'{self.__class__.__name__}("{self.name}", rate={self.num_rate}, spike={self.num_spike})'
 
 
+class CircleFeature(Feature):
+  def __init__(
+      self,
+      n_rate: int = 1,
+      n_spike: int = 20,
+      fr: Union[int, float, Callable] = 30.,
+      limits: Tuple[jnp.number, jnp.number] = (0., np.pi * 2),
+      name: str = None,
+  ):
+    super().__init__(n_rate, n_spike, fr, name)
+    assert len(limits) == 2
+    self.v_min = limits[0]
+    self.v_max = limits[1]
+    self.v_range = limits[1] - limits[0]
+
+
 def is_time_duration(x):
   if isinstance(x, (int, float, Callable)):
     return x
@@ -262,6 +279,7 @@ class CognitiveTask(Dataset):
 
   """
 
+  times = Sequence[str]
   _repr_indent = 4
 
   def __init__(
@@ -302,7 +320,7 @@ class CognitiveTask(Dataset):
     """
     return self.sample_a_trial(index)[:2]
 
-  def sample_a_trial(self, index) -> Tuple[Tuple[Data, AxesInfo], Tuple[Data, AxesInfo]]:
+  def sample_a_trial(self, index) -> Tuple:
     raise NotImplementedError
 
   def __len__(self):
@@ -459,6 +477,12 @@ class TaskLoader(DataLoader):
   @classmethod
   def _get_one_data(cls, dataset, index):
     return dataset._get_item(index)
+
+  def __len__(self):
+    if self.drop_last:
+      return len(self.dataset) // self.batch_size
+    else:
+      return math.ceil(len(self.dataset) / self.batch_size)
 
 
 def _time_first(data):

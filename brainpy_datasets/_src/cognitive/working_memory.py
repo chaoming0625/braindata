@@ -1,14 +1,17 @@
-from typing import Union, Optional, Callable
+from typing import Union, Optional, Callable, Tuple
 
 import numpy as np
-
+import jax.numpy as jnp
 import brainpy as bp
 from brainpy_datasets._src.cognitive.base import (CognitiveTask,
                                                   TimeDuration,
                                                   Feature,
+                                                  CircleFeature,
                                                   is_time_duration)
-from brainpy_datasets._src.cognitive._utils import interval_of, period_to_arr
-from brainpy_datasets._src.utils.others import initialize
+from brainpy_datasets._src.cognitive._utils import (interval_of,
+                                                    period_to_arr,
+                                                    firing_rate)
+from brainpy_datasets._src.utils.others import initialize, initialize2
 from brainpy_datasets._src.utils.random import TruncExp
 
 
@@ -1022,6 +1025,9 @@ class DelayComparison(CognitiveTask):
   The agent needs to compare the magnitude of two stimuli are separated by a
   delay period. The agent reports its decision of the stronger stimulus
   during the decision period.
+
+  This task is used to reproduce the experiments used in
+  `Neuronal Population Coding of Parametric Working Memory <https://www.jneurosci.org/content/30/28/9424>`_.
   """
 
   metadata = {
@@ -1032,15 +1038,16 @@ class DelayComparison(CognitiveTask):
   def __init__(
       self,
       dt: Union[int, float] = 100.,
-      vpairs: Optional[np.ndarray] = None,
+      stimuli: Optional[np.ndarray] = None,
       t_fixation: TimeDuration = 500.,
       t_stimulus1: TimeDuration = 500.,
-      t_stimulus2: TimeDuration = 500.,
       t_delay: TimeDuration = 1000.,
+      t_stimulus2: TimeDuration = 500.,
       t_decision: TimeDuration = 100.,
       ft_fixation: Feature = Feature(1, 20, 100.),
       ft_choice: Feature = Feature(1, 20, 100.),
-      ft_noise: Feature = Feature(1, 20, 50.),
+      ft_recall: Feature = Feature(1, 20, 100.),
+      bg_fr: Union[int, float] = 1.,
       num_trial: int = 1024,
       normalize: bool = True,
       mode: str = 'rate',
@@ -1055,13 +1062,13 @@ class DelayComparison(CognitiveTask):
                      seed=seed)
 
     # Inputs
-    if vpairs is None:
-      self.vpairs = np.linspace(0.5, 1.0, 10)
+    if stimuli is None:
+      self.stimuli = np.linspace(0.5, 1.0, 10)
     else:
-      self.vpairs = np.asarray(vpairs)
+      self.stimuli = np.asarray(stimuli)
     if normalize:
-      r = (self.vpairs - self.vpairs.min()) / (self.vpairs.max() - self.vpairs.min())
-      self.vpairs = r / 2 + 0.5
+      r = (self.stimuli - self.stimuli.min()) / (self.stimuli.max() - self.stimuli.min())
+      self.stimuli = r / 2 + 0.5
 
     # time
     self.t_fixation = is_time_duration(t_fixation)
@@ -1073,8 +1080,9 @@ class DelayComparison(CognitiveTask):
     # features
     self.features = (ft_fixation.set_name('fixation') +
                      ft_choice.set_name('choice') +
-                     ft_noise.set_name('noise'))
+                     ft_recall.set_name('recall'))
     self.features.set_mode(mode)
+    self.bg_fr = bp.check.is_float(bg_fr)
 
     # input / output information
     self.output_features = ['fixation', 'bigger', 'smaller']
@@ -1102,18 +1110,27 @@ class DelayComparison(CognitiveTask):
     X = np.zeros((n_total, self.features.num))
     Y = np.zeros(n_total, dtype=int)
 
-    v1, v2 = self.rng.choice(self.vpairs, 2)
+    v1, v2 = self.rng.choice(self.stimuli, 2, replace=False)
     ground_truth = 1 if (v1 > v2) else 2
 
     ax0_stim1 = interval_of('stimulus1', _periods)
     ax0_stim2 = interval_of('stimulus2', _periods)
     ax0_decision = interval_of('decision', _periods)
     X[:, self.features['fixation'].i] += self.features['fixation'].fr(self.dt)
-    X[:, self.features['noise'].i] += self.features['noise'].fr(self.dt)
     X[ax0_stim1, self.features['choice'].i] += v1 * self.features['choice'].fr(self.dt)
     X[ax0_stim2, self.features['choice'].i] += v2 * self.features['choice'].fr(self.dt)
+    X[ax0_decision, self.features['recall'].i] += self.features['recall'].fr(self.dt)
+
+    bg_fr = self.bg_fr * self.dt / 1e3
+    if self.features.is_spiking_mode:
+      X[:, self.features['choice'].i] += bg_fr
+    else:
+      shape = X[:, self.features['choice'].i].shape
+      X[:, self.features['choice'].i] += (bg_fr + self.rng.randn(*shape) * bg_fr / 100)
+
     if self.features.mode == 'spiking':
       X = self.rng.random(X.shape) < X
+      X = X.astype(float)
 
     Y[ax0_decision] = ground_truth
 
@@ -1126,18 +1143,29 @@ class DelayComparison(CognitiveTask):
     return X, Y, period_to_arr(_periods)
 
 
-class DMS(CognitiveTask):
+class CircleFeatDMS(CognitiveTask):
+  """Delayed match-to-sample task for a circle feature.
+
+  This task uses von Misses distribution to generate the response for the encoding feature.
+
+  """
+
+  times = ('dead', 'fixation', 'sample', 'delay', 'test')
+  output_features = ('fixation', 'non-match', 'match')
+
   def __init__(
       self,
       dt: Union[int, float] = 100.,
       t_fixation: TimeDuration = 500.,
       t_sample: TimeDuration = 500.,
       t_delay: TimeDuration = 1000.,
-      t_test: TimeDuration = 100.,
-      ft_fixation: Feature = Feature(1, 20, 100.),
-      ft_choice: Feature = Feature(1, 20, 100.),
-      ft_noise: Feature = Feature(1, 20, 50.),
+      t_test: TimeDuration = 500.,
+      limits: Tuple = (0., np.pi * 2),
+      bg_fr: Union[int, float] = 1.,
+      ft_motion: Feature = Feature(24, 100, 40.),
+      ft_recall: Feature = Feature(1, 10, 40.),
       num_trial: int = 1024,
+      kappa: Union[int, float] = 2,
       mode: str = 'rate',
       seed: Optional[int] = None,
       input_transform: Optional[Callable] = None,
@@ -1149,13 +1177,237 @@ class DMS(CognitiveTask):
                      num_trial=num_trial,
                      seed=seed)
 
+    # time
     self.t_fixation = is_time_duration(t_fixation)
     self.t_sample = is_time_duration(t_sample)
     self.t_delay = is_time_duration(t_delay)
     self.t_test = is_time_duration(t_test)
 
-    self.features = ft_fixation.set_name('fixation')
+    # input shape
+    self.features = ft_motion.set_name('motion')
+    self.features.set_mode(mode)
+    self.bg_fr = bg_fr  # background firing rate
+    self.v_min = limits[0]
+    self.v_max = limits[1]
+    self.v_range = limits[1] - limits[0]
+    self.test_cost_multiplier = 1.
+
+    # Tuning function data
+    self.n_motion_choice = 8
+    self.kappa = kappa  # concentration scaling factor for von Mises
+
+    # Generate list of preferred directions
+    # dividing neurons by 2 since two equal
+    # groups representing two modalities
+    pref_dirs = np.arange(self.v_min, self.v_max, self.v_range / ft_motion.num)
+
+    # Generate list of possible stimulus directions
+    stim_dirs = np.arange(self.v_min, self.v_max, self.v_range / self.n_motion_choice)
+
+    d = np.cos(np.expand_dims(stim_dirs, 1) - pref_dirs)
+    self.motion_tuning = np.exp(self.kappa * d) / np.exp(self.kappa)
+
+  @property
+  def num_inputs(self) -> int:
+    return self.features.num
+
+  @property
+  def num_outputs(self) -> int:
+    return 3
+
+  def sample_a_trial(self, index):
+    t_fixation = initialize2(self.t_fixation, self.dt)
+    t_sample = initialize2(self.t_sample, self.dt)
+    t_delay = initialize2(self.t_delay, self.dt)
+    t_test = initialize2(self.t_test, self.dt)
+    num_steps = t_fixation + t_sample + t_delay + t_test
+    _times = {
+      'fixation': t_fixation,
+      'sample': t_sample,
+      'delay': t_delay,
+      'test': t_test,
+    }
+
+    # Determine the delay time for this trial. The total trial length
+    # is kept constant, so a shorter delay implies a longer test stimulus
+    test_onset = t_fixation + t_sample + t_delay
+    test_time = slice(test_onset, test_onset + t_test)
+    fix_time = slice(0, test_onset)
+    sample_time = slice(t_fixation, t_fixation + t_sample)
+
+    # data
+    X = np.zeros((num_steps, self.num_inputs))
+    Y = np.zeros((num_steps, self.num_outputs))
+
+    # sample
+    match = self.rng.randint(2)
+    sample_dir = self.rng.randint(self.n_motion_choice)
+
+    # Generate the sample and test stimuli based on the rule
+    if match == 1:  # match trial
+      test_dir = sample_dir
+    else:
+      test_dir = self.rng.randint(self.n_motion_choice)
+      while test_dir == sample_dir:
+        test_dir = self.rng.randint(self.n_motion_choice)
+
+    # SAMPLE stimulus
+    fr = self.features.fr(self.dt)
+    X[sample_time] += self.motion_tuning[sample_dir] * fr
+    # TEST stimulus
+    X[test_time] += self.motion_tuning[test_dir] * fr
+    X += firing_rate(self.bg_fr, self.dt, self.features.mode)
+
+    # to spiking
+    if self.features.is_spiking_mode:
+      X = self.rng.random(X.shape) < X
+      X = np.asarray(X, dtype=float)
+
+    # Determine the desired network output response
+    Y[fix_time, 0] = 1.
+    # can use a greater weight for test period if needed
+    if match == 0:
+      Y[test_time, 1] = 1.
+    else:
+      Y[test_time, 2] = 1.
+
+    return X, Y, {'times': period_to_arr(_times)}
 
 
+class CircleFeatDMS_recall(CognitiveTask):
+  """Delayed match-to-sample task for a circle feature.
 
+  This task uses von Misses distribution to generate the response for the encoding feature.
 
+  """
+
+  times = ('dead', 'fixation', 'sample', 'delay', 'test')
+  output_features = ('fixation', 'non-match', 'match')
+
+  def __init__(
+      self,
+      dt: Union[int, float] = 100.,
+      t_fixation: TimeDuration = 500.,
+      t_sample: TimeDuration = 500.,
+      t_delay: TimeDuration = 1000.,
+      t_test: TimeDuration = 500.,
+      t_recall: TimeDuration = 100.,
+      limits: Tuple = (0., np.pi * 2),
+      bg_fr: Union[int, float] = 1.,
+      ft_motion: Feature = Feature(24, 100, 40.),
+      ft_recall: Feature = Feature(1, 10, 40.),
+      num_trial: int = 1024,
+      kappa: Union[int, float] = 2,
+      mode: str = 'rate',
+      seed: Optional[int] = None,
+      input_transform: Optional[Callable] = None,
+      target_transform: Optional[Callable] = None,
+  ):
+    super().__init__(input_transform=input_transform,
+                     target_transform=target_transform,
+                     dt=dt,
+                     num_trial=num_trial,
+                     seed=seed)
+
+    # time
+    self.t_recall = is_time_duration(t_recall)
+    self.t_fixation = is_time_duration(t_fixation)
+    self.t_sample = is_time_duration(t_sample)
+    self.t_delay = is_time_duration(t_delay)
+    self.t_test = is_time_duration(t_test)
+
+    # input shape
+    self.features = ft_motion.set_name('motion') + ft_recall.set_name('recall')
+    self.features.set_mode(mode)
+    self.bg_fr = bg_fr  # background firing rate
+    self.v_min = limits[0]
+    self.v_max = limits[1]
+    self.v_range = limits[1] - limits[0]
+    self.test_cost_multiplier = 1.
+
+    # Tuning function data
+    self.n_motion_choice = 8
+    self.kappa = kappa  # concentration scaling factor for von Mises
+
+    # Generate list of preferred directions
+    # dividing neurons by 2 since two equal
+    # groups representing two modalities
+    pref_dirs = np.arange(self.v_min, self.v_max, self.v_range / ft_motion.num)
+
+    # Generate list of possible stimulus directions
+    stim_dirs = np.arange(self.v_min, self.v_max, self.v_range / self.n_motion_choice)
+
+    d = np.cos(np.expand_dims(stim_dirs, 1) - pref_dirs)
+    self.motion_tuning = np.exp(self.kappa * d) / np.exp(self.kappa)
+
+  @property
+  def num_inputs(self) -> int:
+    return self.features.num
+
+  @property
+  def num_outputs(self) -> int:
+    return 3
+
+  def sample_a_trial(self, index):
+    t_recall = initialize2(self.t_recall, self.dt)
+    t_fixation = initialize2(self.t_fixation, self.dt)
+    t_sample = initialize2(self.t_sample, self.dt)
+    t_delay = initialize2(self.t_delay, self.dt)
+    t_test = initialize2(self.t_test, self.dt)
+    num_steps = t_fixation + t_sample + t_delay + t_test + t_recall
+    _times = {
+      'fixation': t_fixation,
+      'sample': t_sample,
+      'delay': t_delay,
+      'test': t_test,
+      'recall': t_recall,
+    }
+
+    # Determine the delay time for this trial. The total trial length
+    # is kept constant, so a shorter delay implies a longer test stimulus
+    test_onset = t_fixation + t_sample + t_delay
+    recall_time = slice(test_onset + t_test, num_steps)
+    test_time = slice(test_onset, test_onset + t_test)
+    recall_p = interval_of('recall', _times)
+    fix_time = slice(0, test_onset + t_test)
+    sample_time = slice(t_fixation, t_fixation + t_sample)
+
+    # data
+    X = np.zeros((num_steps, self.num_inputs))
+    Y = np.zeros((num_steps, self.num_outputs))
+
+    # sample
+    match = self.rng.randint(2)
+    sample_dir = self.rng.randint(self.n_motion_choice)
+
+    # Generate the sample and test stimuli based on the rule
+    if match == 1:  # match trial
+      test_dir = sample_dir
+    else:
+      test_dir = self.rng.randint(self.n_motion_choice)
+      while test_dir == sample_dir:
+        test_dir = self.rng.randint(self.n_motion_choice)
+
+    # SAMPLE stimulus
+    fr = self.features['motion'].fr(self.dt)
+    X[sample_time, self.features['motion'].i] += self.motion_tuning[sample_dir] * fr
+    # TEST stimulus
+    X[test_time, self.features['motion'].i] += self.motion_tuning[test_dir] * fr
+    X[:, self.features['motion'].i] += firing_rate(self.bg_fr, self.dt, self.features.mode)
+    # recall
+    X[recall_time, self.features['recall'].i] += self.features['recall'].fr(self.dt)
+
+    # to spiking
+    if self.features.is_spiking_mode:
+      X = self.rng.random(X.shape) < X
+      X = np.asarray(X, dtype=float)
+
+    # Determine the desired network output response
+    Y[fix_time, 0] = 1.
+    # can use a greater weight for test period if needed
+    if match == 0:
+      Y[recall_p, 1] = 1.
+    else:
+      Y[recall_p, 2] = 1.
+
+    return X, Y, {'times': period_to_arr(_times)}
